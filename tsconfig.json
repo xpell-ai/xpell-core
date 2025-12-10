@@ -1,0 +1,29 @@
+{
+    "compilerOptions": {
+        "target": "ES2021",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": [
+            "ES2021",
+            "DOM"
+        ],
+        "strict": true,
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "noEmit": true,
+        "baseUrl": "./",
+        "paths": {
+            "xpell-core": [
+                "./src"
+            ]
+        }
+    },
+    "include": [
+        "src",
+        "vite.config.ts",
+        "typedoc.json"
+    ]
+}
