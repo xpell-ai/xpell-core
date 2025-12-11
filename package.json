@@ -1,6 +1,6 @@
 {
   "name": "xpell-core",
-  "version": "1.0.0",
+  "version": "1.0.01",
   "description": "Core runtime and interpreter for the Xpell engine (browser-based execution layer).",
   "type": "module",
   "files": [
