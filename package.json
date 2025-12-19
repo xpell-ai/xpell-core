@@ -1,6 +1,6 @@
 {
   "name": "xpell-core",
-  "version": "2.0.0-alpha.3",
+  "version": "2.0.0-alpha.5",
   "description": "Core runtime and interpreter for the Xpell engine (browser-based execution layer).",
   "type": "module",
   "files": [
@@ -25,7 +25,7 @@
     "docs:api": "typedoc",
     "docs": "pnpm run docs:api",
     "test": "echo \"No tests yet\" && exit 0",
-    "publish-alpha": "pnpm version prerelease --preid=alpha --no-git-tag-version && pnpm publish --tag alpha"
+    "publish-alpha": "pnpm version prerelease --preid=alpha --no-git-tag-version && git add package.json pnpm-lock.yaml && git commit -m \"chore: bump version (alpha)\" && pnpm publish --tag alpha"
   },
   "keywords": [
     "xpell",
