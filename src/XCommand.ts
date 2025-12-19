@@ -1,4 +1,43 @@
 
+/**
+ * XCommand — Runtime Command Representation
+ *
+ * Canonical command structure used by the Xpell runtime.
+ *
+ * `XCommand` represents a parsed, normalized command produced by the
+ * Xpell parser and consumed by modules (`XModule`) and runtime objects
+ * (`XObject`) for execution.
+ *
+ * ---
+ *
+ * ## Responsibilities
+ *
+ * - Represent an executable command (`_op`, `_params`, metadata)
+ * - Serve as the output of the Xpell parser
+ * - Provide a uniform execution contract across runtime layers
+ *
+ * ---
+ *
+ * ## Execution Flow
+ *
+ * - Text / JSON / CLI-style input → Xpell Parser
+ * - Parser output → `XCommand`
+ * - Execution target → `XModule` or `XObject`
+ *
+ * ---
+ *
+ * XCommand is a transportable, serializable instruction
+ * independent of execution context.
+ *
+ * One-liner: XCommand is intent made executable.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
+ */
 
 
 export type XCommandData = {
@@ -11,9 +50,7 @@ export type XCommandData = {
 }
 
 
-/**
- * XCommand class - this command is being sent to the Xpell parser or every XModule/XObject for execution
- */
+
 
 export  class XCommand {
 

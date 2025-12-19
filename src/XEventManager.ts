@@ -1,20 +1,55 @@
 /**
+ * XEventManager — Runtime Event System
+ *
+ * Central event dispatching and subscription engine for the Xpell runtime.
+ *
+ * `XEventManager` (exposed as `_xem`) provides a lightweight, decoupled
+ * pub/sub mechanism used across Xpell modules to communicate via events
+ * without introducing direct dependencies.
+ *
+ * ---
+ *
+ * ## Responsibilities
+ *
+ * - Register event listeners (`on`)
+ * - Dispatch events with payloads (`fire`)
+ * - Support scoped, instance-bound, and one-time listeners
+ * - Manage listener lifecycle and cleanup
+ *
+ * ---
+ *
+ * ## Usage
+ *
+ * ### Listen to an event
+ *
+ * ```ts
+ * _xem.on("my-event", (eventName, data) => {
+ *   console.log("XEM Event", eventName, data)
+ * })
+ * ```
+ *
+ * ### Fire an event
+ *
+ * ```ts
+ * _xem.fire("my-event", { _data_param: "my data" })
+ * ```
+ *
+ * ---
+ *
+ * XEventManager is infrastructure-only and does not assume
+ * UI, navigation, or data-layer semantics.
+ *
+ * One-liner: XEventManager decouples runtime behavior through events.
+ *
+ * @packageDocumentation
  * @file XEventManager.ts
- * @overview XEventManager (_xem) is Xpell event system manager.
- * @description This engine enables event dispatching and listening
- * 
- * Usage: 
- * 
- * 1.Event Listen
- *      // listen to event name "my-event" and display the event data to the console when fired
- *      _xem.on("my-event",(eventName,data)=>{
- *          console.log("XEM Event " + eventName,data)
- *      })
- * 
- * 2. Event Fire
- *      //fire (trigger) event name "my-event" and simple object as data
- *      _xem.fire("my-event",{_data_param:"my data"})
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
  */
+
 import { _xlog } from "./XLogger"
 import { XUtils as _xu } from "./XUtils"
 

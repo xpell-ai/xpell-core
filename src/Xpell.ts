@@ -1,17 +1,35 @@
 /**
- * Xpell - Real-Time User Interface Platform
- * Typescript Edition   
- *      
- * @file Xpell.ts
- * @overview Xpell Engine main file
- * @description Xpell Engine is a real-time user interface platform 
- * for Javascript supporting devices & browsers.
- * @since  22/07/2022
- * @author Fridman Tamir
- * @license MIT
+ * Xpell — Core Runtime Engine
  *
+ * Entry point for the Xpell runtime.
+ *
+ * Xpell is a real-time application platform for JavaScript,
+ * providing a unified runtime for UI, data, navigation,
+ * and real-time communication across browsers and devices.
+ *
+ * ---
+ *
+ * ## Core Modules
+ *
+ * - **XUI** — User Interface engine (HTML / CSS / DOM)
+ * - **XVM** — View Manager (navigation, regions, history)
+ * - **XDB** — Data engine (entities, semantics, vectors)
+ * - **Wormholes** — Real-time transport and sessions
+ *
+ * ---
+ *
+ * Xpell coordinates these modules into a single,
+ * deterministic runtime environment.
+ *
+ * Xpell turns UI, data, and AI into a live runtime.
+ * 
+ * @packageDocumentation
+ * @file xpell.ts
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @copyright © 2022–present Aime Technologies. All rights reserved.
+ * @license MIT
  */
-
 
 
 
@@ -224,3 +242,4 @@ export {
 export {XObjectManager} from "./XObjectManager"
 export {XEventManager, XEventManager as _xem,type XEventListener,type XEvent,type XEventListenerOptions,_XEventManager,type HTMLEventListenersIndex} from "./XEventManager"
 export {type XNanoCommandPack,type XNanoCommand} from "./XNanoCommands"
+export {XParams} from "./XParams"

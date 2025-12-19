@@ -1,29 +1,59 @@
 /**
- * XModule - Xpell Base Module
- * This class is being extended by modules with the following logic:
- * 1. Every module must have a name
- * 2. Module holds Object manager to manager the module specific object (extends XObject)
- * 3. Every module can execute XCommand (XCommand, JSON, text(CLI style)),
- *    the rules of the method invocation is the "underscore" sign, meaning functions that will start with "_" sign
- *    will be exposed to XPell Interpreter
+ * XModule — Base Runtime Module
  *
- * @example
- *  '''
- *    The following module:
- *      
- *    class myModule extends XModule {
- *          constructor() {...}
- *          _my_Command(xCommand) {
- *              ...
- *          }
- *    }
- * 
- *    will be called like this:
- * 
- *    XModule.execute("my-Command")
- *      - when calling the method there is no need for the underscore sign, spaces and dashes will be converted to underscore
- *  '''
+ * Abstract base class for all Xpell runtime modules.
+ *
+ * XModule defines the contract for extending the Xpell interpreter
+ * with modular functionality, object ownership, and executable commands.
+ *
+ * ---
+ *
+ * ## Module Rules
+ *
+ * - Every module MUST have a unique name
+ * - Each module owns an Object Manager responsible for module-specific XObjects
+ * - Child XObjects are managed via their parent and not independently
+ * - Modules may execute commands via `XCommand`, JSON, or CLI-style text
+ *
+ * ---
+ *
+ * ## Command Exposure Rules
+ *
+ * - Methods prefixed with `_` are exposed to the Xpell interpreter
+ * - Public command names:
+ *   - Strip the leading `_`
+ *   - Convert spaces and dashes to underscores
+ *
+ * ---
+ *
+ * ## Example
+ *
+ * ```ts
+ * class MyModule extends XModule {
+ *   _my_Command(xCommand) {
+ *     // command implementation
+ *   }
+ * }
+ *
+ * // Invocation:
+ * XModule.execute("my-Command")
+ * ```
+ *
+ * ---
+ *
+ * XModule is the extension point that turns the Xpell core
+ * into a programmable runtime.
+ *
+ * One-liner: XModule is how behavior enters the Xpell runtime.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
  */
+
 import XUtils from "./XUtils"
 import XParser from "./XParser"
 import { XLogger as _xl } from "./XLogger";
@@ -46,7 +76,7 @@ export type XModuleData = {
  * 
  */
 export class XModule {
-    [k:string]:any
+    [k: string]: any
     _id: string
     _name: string;
     _log_rules: {
@@ -79,9 +109,9 @@ export class XModule {
      * @param data - The data of the new object (JSON)
      * @return {XObject|*}
      */
-    create(data:XObjectData) {
+    create(data: XObjectData) {
 
-        let xObject:any;
+        let xObject: any;
         if (data.hasOwnProperty("_type")) {
             if (this.#_object_manger.hasObjectClass(<string>data["_type"])) {
                 let xObjectClass = this.#_object_manger.getObjectClass(<string>data["_type"]);
@@ -101,12 +131,12 @@ export class XModule {
         //await spell_object.init();
         this.#_object_manger.addObject(xObject)
         if (data._children) {
-            // const sthis = this //strong "this" for anonymous function use
-            data._children.forEach(async (spell) => {
-                let new_spell = this.create(<any>spell);
-                xObject.append(new_spell)
+            data._children.forEach((child) => {
+                const newChild = this.create(child as any);
+                xObject.append(newChild);
             });
         }
+
         xObject.onCreate()
         return xObject;
     }
@@ -115,23 +145,31 @@ export class XModule {
      * removes and XObject from the object manager
      * @param objectId op
      */
-    remove(objectId:string) {
-        const obj:XObject = this.#_object_manger.getObject(objectId)
-        if (obj) {
-            this.#_object_manger.removeObject(objectId)
+    remove(objectId: string) {
+        const obj: XObject = this.#_object_manger.getObject(objectId);
+        if (!obj) return;
 
-            obj._children.forEach((child:any) => {
-                this.#_object_manger.removeObject(child._id)
-            })
+        const ids: string[] = [];
+        const walk = (o: any) => {
+            if (!o?._id) return;
+            ids.push(o._id);
+            (o._children ?? []).forEach((c: any) => walk(c));
+        };
+        walk(obj);
 
-            if(obj["dispose"] && typeof obj.dispose === "function") {
-                (<XObject>obj).dispose()
-            }
+        // dispose first (recursively stops listeners/frame/data + clears refs)
+        if (typeof (obj as any).dispose === "function") {
+            (obj as any).dispose();
         }
+
+        // unregister bottom-up (safer)
+        ids.reverse().forEach(id => this.#_object_manger.removeObject(id));
     }
 
 
-    _info(xCommand:XCommand) {
+
+
+    _info(xCommand: XCommand) {
         _xl.log("module info")
     }
 
@@ -142,7 +180,7 @@ export class XModule {
      * @param {string} XCommand input - text 
      * @returns command execution result
      */
-    async run(stringXCommand:string) {
+    async run(stringXCommand: string) {
         if (stringXCommand) {
             let strCmd = stringXCommand.trim()
             //add module name to run command if not exists (in case of direct call from the module)
@@ -164,30 +202,38 @@ export class XModule {
      * @param {XCommand} XCommand input (JSON)
      * @returns command execution result
      */
+    // inside XModule class
     async execute(xCommand: XCommand | XCommandData) {
-
-
-        //search for xpell wrapping functions (starts with _ "underscore" example -> _start() , async _spell_async_func() )
-        if(xCommand._op){
-            const lop:string = "_" + xCommand._op.replaceAll('-', '_') //search for local op = lop
-        if (this[lop] && typeof this[lop] === 'function') {
-            return this[lop](xCommand)
+        if (!xCommand || !xCommand._op) {
+            throw new Error(`Invalid XCommand: missing _op (module: ${this._name})`);
         }
-        else if (this.#_object_manger) //direct xpell injection to specific module
-        {
 
-            const o = this.#_object_manger.getObjectByName(xCommand._op)
-            if (o) { o.execute(xCommand) }
-            else { throw "Xpell Module cant find op:" + xCommand._op }
+        // 1) Object-targeted command (explicit, safe):  xui #main show
+        // Objects can execute ONLY nano commands via XObject.execute()
+        const objectId = (xCommand as any)._object as string | undefined;
+        if (objectId) {
+            const obj = this.#_object_manger.getObject(objectId);
+            if (!obj) {
+                throw new Error(`Module '${this._name}' cant find object id: ${objectId}`);
+            }
+            // IMPORTANT: await for future async nano-commands
+            return await obj.execute(xCommand as any);
         }
-        else {
-            throw "Xpell Module cant find op:" + xCommand._op
-        }
-        }
-        
 
+        // 2) Module-level operation: call methods that start with "_" only
+        // "my-op" => "_my_op"
+        const lop = "_" + xCommand._op.replaceAll("-", "_");
+        const fn = (this as any)[lop];
 
+        if (typeof fn === "function") {
+            return await fn.call(this, xCommand);
+        }
+
+        // 3) No fallback to getObjectByName (backward-safe + avoids ambiguity)
+        throw new Error(`Module '${this._name}' cant find op: ${xCommand._op}`);
     }
+
+
 
     /**
      * This method triggers every frame from the Xpell engine.
@@ -198,12 +244,12 @@ export class XModule {
         const omObjects = this.#_object_manger._objects
         const keys = Object.keys(omObjects)
         keys.forEach(key => {
-            const onFrameCallBack:XObject = <any>omObjects[key]
+            const onFrameCallBack: XObject = <any>omObjects[key]
             if (onFrameCallBack && onFrameCallBack.onFrame && typeof onFrameCallBack.onFrame === 'function') {
                 onFrameCallBack?.onFrame(frameNumber)
             }
         })
-        _xd._o[this._name + "-om-objects"] = keys.length        
+        _xd._o[this._name + "-om-objects"] = keys.length
     }
 
 
@@ -226,7 +272,7 @@ export class XModule {
      * @param objectId 
      * @returns XObject
      */
-    getObject(objectId:string):XObject {
+    getObject(objectId: string): XObject {
         return this.#_object_manger.getObject(objectId)
     }
 
@@ -235,7 +281,7 @@ export class XModule {
      * Usage:
      * xmodule._o["object-id"] is equivalent to xmodule.getObject("object-id")
      */
-    get _o()  {
+    get _o() {
         return this.#_object_manger._objects
     }
 
@@ -263,8 +309,28 @@ export class XModule {
      * @param xObjectName 
      * @param xObject 
      */
-    importObject(xObjectName:string, xObject:XObject) {
+    importObject(xObjectName: string, xObject: XObject) {
         this.#_object_manger.registerObject(xObjectName, xObject)
+    }
+
+    // In XModule
+    async _help(cmd: any) {
+        // Optional: topic filter: xvm help _op:"navigate"
+        const op = (cmd?._params?._op ?? cmd?._params?._command ?? "") as string;
+        return this.help(op);
+    }
+
+    /**
+     * Override in modules to provide help text.
+     * @param op optional: specific command name (e.g. "navigate")
+     */
+    help(op?: string): any {
+        return {
+            module: this._name,
+            usage: `${this._name} help`,
+            ops: ["help"],
+            note: "No help() implemented for this module."
+        };
     }
 
 }

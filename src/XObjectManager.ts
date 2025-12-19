@@ -1,11 +1,31 @@
+/**
+ * XObjectManager — Module Object Registry
+ *
+ * Central manager for module-owned XObject instances.
+ *
+ * XObjectManager tracks and manages root XObjects created by Xpell modules.
+ * Child XObjects are considered part of their parent hierarchy and are
+ * not managed independently by the manager.
+ *
+ * XModules use XObjectManager to:
+ * - Register and resolve XObject classes by `_type`
+ * - Create new XObject instances from schemas or commands
+ * - Maintain deterministic ownership of module-level objects
+ *
+ * One-liner: XObjectManager governs the lifetime of module root objects.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
+ */
+
+
 import XLogger from "./XLogger";
 import XObject, { XObjectPack } from "./XObject";
 
-/**
- * Xpell Module Object Manager
- * @description This manager holds the module XObjects that should be managed (XObject children will not be managed separately)
- * XModules uses the Object Manager to create new XObjects by providing the class of the object by name
- */
 
 export type XObjectManagerIndex = {
     [name:string]:any
@@ -119,7 +139,8 @@ export class XObjectManager {
     removeObject(xObjectId:string) {
         const obj = this.#_xobjects[xObjectId]
         if(obj) {
-            delete this.#_names_index[obj?.name] //= null
+            // delete this.#_names_index[obj?.name] //= null
+            delete this.#_names_index[(obj as any)?._name]
             delete this.#_xobjects[xObjectId] //= null;
         }
     }

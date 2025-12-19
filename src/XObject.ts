@@ -1,6 +1,29 @@
 /**
- * XObject - Base Xpell object for Xpell modules
+ * XObject — Core Runtime Object Model
+ *
+ * The foundational primitive of the Xpell runtime.
+ *
+ * `XObject` is the base class for objects managed by Xpell modules and provides:
+ * - Identity (`_id`) and typing (`_type`)
+ * - Tree composition (`_children` / `_parent`)
+ * - Lifecycle hooks (`onCreate`, `onMount`, `onFrame`, `onData`)
+ * - Event binding via `XEventManager` (`_on` / `_once`)
+ * - Nano-command execution (`run` / `execute`) powered by `XParser` + `XCommand`
+ * - Data-source integration (`_data_source`) and XData export (`toXData`)
+ *
+ * XObject is module-agnostic: UI (XUI), navigation (XVM), data (XDB), and transport
+ * layers build on top of it without changing its core contract.
+ *
+ * One-liner: XObject is the universal runtime node for Xpell.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
  */
+
 
 import { XUtils } from "./XUtils"
 import XCommand, { XCommandData } from "./XCommand";

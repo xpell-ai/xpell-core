@@ -1,11 +1,13 @@
 {
+  "name": "xpell-core",
   "entryPoints": ["src/index.ts"],
-  "out": "docs",
+  "out": "docs/api/",
   "tsconfig": "tsconfig.json",
   "excludeExternals": true,
   "excludePrivate": true,
   "excludeProtected": false,
   "excludeInternal": true,
   "hideGenerator": true,
-  "readme": "README.md"
+  "sort": ["source-order"],
+  "readme": "none"
 }

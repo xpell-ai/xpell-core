@@ -1,6 +1,26 @@
 /**
- * This file contains all the Basic Nano Commands of the Xobject
-*/
+ * XNanoCommands — Core Nano Command Definitions
+ *
+ * Built-in nano commands available to all XObject instances.
+ *
+ * This module defines the foundational nano commands that form the
+ * minimal executable vocabulary of the Xpell runtime. These commands
+ * are registered on every XObject and can be invoked via command text,
+ * events, or programmatic execution.
+ *
+ * Nano commands act as the bridge between declarative intent
+ * (strings, schemas, AI output) and imperative runtime behavior.
+ *
+ * One-liner: Nano commands are the verbs of the Xpell runtime.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
+ */
+
 
 import XCommand, { XCommandData } from "./XCommand"
 import { XEventManager as _xem } from "./XEventManager"

@@ -50,6 +50,7 @@ typings/
 
 # Optional npm cache directory
 .npm
+.pnpm-store
 
 # Optional eslint cache
 .eslintcache
@@ -106,6 +107,9 @@ typings/
 
 #TypeDocs files
 .docs/
+# generated api docs
+docs/api/
+
 
 #Xpell
 

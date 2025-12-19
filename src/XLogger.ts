@@ -1,7 +1,33 @@
 /**
- * Xpell-logger
+ * XLogger — Xpell Logging Engine
+ *
+ * Central logging facility for the Xpell runtime.
+ *
+ * Provides a lightweight, unified logging API (`_xlog`) used across
+ * all Xpell modules for diagnostics, debugging, and runtime visibility.
+ *
+ * ---
+ *
+ * ## Responsibilities
+ *
+ * - Structured logging for core runtime events
+ * - Debug and error reporting across modules
+ * - Optional verbosity and filtering controls
+ *
+ * ---
+ *
+ * XLogger is infrastructure-only and has no dependency on
+ * UI, navigation, or data layers.
+ *
+ * One-liner: XLogger is the voice of the Xpell runtime.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @license MIT
+ * @copyright
+ * © 2022–present Aime Technologies. All rights reserved.
  */
-
 
 
 

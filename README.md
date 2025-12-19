@@ -51,6 +51,21 @@ Most end-users should install:
 
 which includes xpell-core automatically.
 
+## Who Should Use xpell-core Directly?
+
+Most developers should **not** depend on xpell-core directly.
+
+Use xpell-core only if you are:
+- Developing Xpell framework modules
+- Building custom runtime systems
+- Extending XModule or XObject internals
+- Working on Xpell UI / 3D / server internals
+
+For application development, use:
+- xpell-ui
+- xpell
+
+
 ## Relationship to the Xpell Framework
 
 Xpell Core powers all other Xpell packages:
@@ -61,6 +76,11 @@ Xpell Core powers all other Xpell packages:
 - future Xpell II modules  
 
 ## Documentation
+
+For a detailed overview of the Xpell architecture, see  
+[`docs/architecture/overview.md`](docs/architecture/overview.md).
+
+## Links
 
 https://xpell.ai
 

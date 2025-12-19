@@ -1,11 +1,36 @@
-//import { performance } from "perf_hooks";
+/**
+ * XUtils — Xpell Utility Package
+ *
+ * Shared utility functions used across the Xpell runtime.
+ *
+ * Provides small, focused helpers that support core modules
+ * (XUI, XVM, XDB, Wormholes) without introducing cross-module
+ * dependencies or architectural coupling.
+ *
+ * ---
+ *
+ * ## Design Principles
+ *
+ * - Stateless and side-effect minimal
+ * - No runtime ownership or lifecycle management
+ * - Safe to use across client, server, and tooling
+ * - Free of UI, navigation, and data-layer assumptions
+ *
+ * ---
+ *
+ * XUtils exists to reduce duplication while keeping the core
+ * architecture clean and modular.
+ *
+ * @packageDocumentation
+ * @since 2022-07-22
+ * @author Tamir Fridman
+ * @copyright © 2022–present Aime Technologies. All rights reserved.
+ * @license MIT
+ */
 
 import XCommand from "./XCommand";
 
 
-// declare class performance{ 
-//     declare function now()
-// }
 
 
 interface IXData {
