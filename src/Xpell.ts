@@ -36,33 +36,34 @@
 
 /** interface */
 import XCommand from "./XCommand"
-import {XUtils,FPSCalc} from "./XUtils"
-import {XLogger as _xlog} from "./XLogger"
+import { XUtils, FPSCalc } from "./XUtils"
+import { XLogger as _xlog } from "./XLogger"
 import XData from "./XData"
 import XParser from "./XParser"
 import XModule from "./XModule"
-import {XEventManager as XEM} from  "./XEventManager"
+import { XEventManager as XEM } from "./XEventManager"
 
 
 
 
-
+export const XD_FRAME_NUMBER = "engine:frame-number";
+export const XD_FPS = "engine:fps";
 
 
 /**
  * @class  Xpell main engine
  */
 export class XpellEngine {
-    _version : string
+    _version: string
     _engine_id: string
     _frame_number: number
     _log_rules = {
     }
     private _fps_calc: FPSCalc
 
-    private _modules:{[name:string]:any} = {}
+    private _modules: { [name: string]: any } = {}
     parser: typeof XParser
-   
+
     constructor() {
         this._version = "0.0.1"
         this._engine_id = XUtils.guid()
@@ -79,8 +80,8 @@ export class XpellEngine {
     /**
      * Enable Xpell logs to console
      */
-    set verbose(val : boolean){
-        _xlog._enabled=true
+    set verbose(val: boolean) {
+        _xlog._enabled = val
     }
 
 
@@ -91,8 +92,8 @@ export class XpellEngine {
      * @param msg 
      * @param optionalParams
      */
-    log(message?: any, ...optionalParams: any[])  {
-        _xlog.log(message,...optionalParams)
+    log(message?: any, ...optionalParams: any[]) {
+        _xlog.log(message, ...optionalParams)
     }
 
     /**
@@ -100,18 +101,18 @@ export class XpellEngine {
      * @param ms - delay in milliseconds
      * @returns 
      */
-    async delay(ms:number) {
+    async delay(ms: number) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    
-   
+
+
 
     /**
      * Loads Xpell module into the engine
      * @param {XModule} xModule 
      */
-    loadModule(xModule:XModule):void {
+    loadModule(xModule: XModule): void {
         if (this._modules.hasOwnProperty(xModule._name)) {
             _xlog.log("Module " + xModule._name + " already loaded")
         } else {
@@ -124,27 +125,27 @@ export class XpellEngine {
      * Loads multiple module at ones
      * @param {Array<XModule>} xModulesArray 
      */
-    loadModules(...xModulesArray:Array<XModule>  ):void {
+    loadModules(...xModulesArray: Array<XModule>): void {
         xModulesArray.forEach(mod => this.loadModule(mod))
     }
 
-    
+
 
     /**
      * Display information about the Xpell engine to the console
      */
-    info(){
-        _xlog.log("Xpell information:\n- Engine Id: "  + this._engine_id + "\n- Version " + this._version)   
+    info() {
+        _xlog.log("Xpell information:\n- Engine Id: " + this._engine_id + "\n- Version " + this._version)
     }
 
 
-     /**
-     * Run textual xCommand -
-     * @param {cmd} - text command
-     */
+    /**
+    * Run textual xCommand -
+    * @param {cmd} - text command
+    */
 
-    run(stringXCommand:string) {
-        if(stringXCommand?.length>2) {
+    run(stringXCommand: string) {
+        if (stringXCommand?.length > 2) {
             let scmd = XParser.parse(stringXCommand)
             return this.execute(scmd)
         } else {
@@ -156,8 +157,8 @@ export class XpellEngine {
      * Execute Xpell Command 
      * @param {XCommand} 
      */
-    execute(xcmd:XCommand):any {
-        if(xcmd && xcmd._module && this._modules[xcmd._module]) {
+    execute(xcmd: XCommand): any {
+        if (xcmd && xcmd._module && this._modules[xcmd._module]) {
             return this._modules[xcmd._module].execute(xcmd)
         } else {
             throw "Xpell module " + xcmd._module + " not loaded"
@@ -170,18 +171,23 @@ export class XpellEngine {
      * Main onFrame method
      * calls all the sub-modules onFrame methods (if implemented)
      */
-     onFrame():void {     
+    onFrame(): void {
         this._frame_number++
         Object.keys(this._modules).forEach(mod => {
-            
-            if(this._modules[mod].onFrame && typeof this._modules[mod].onFrame === 'function') {
+
+            if (this._modules[mod].onFrame && typeof this._modules[mod].onFrame === 'function') {
                 this._modules[mod].onFrame(this._frame_number)
             }
         })
-        XData._o["frame-number"] = this._frame_number
-        XData._o["fps"] = this._fps_calc.calc()
-        
-        requestAnimationFrame(() => {Xpell.onFrame()})         
+        // legacy keys (deprecated)
+        XData._o["frame-number"] = this._frame_number;
+        XData._o["fps"] = this._fps_calc.calc();
+
+        // canonical keys (preferred)
+        XData._o[XD_FRAME_NUMBER] = this._frame_number;
+        XData._o[XD_FPS] = XData._o["fps"];
+
+        requestAnimationFrame(() => this.onFrame());
     }
 
 
@@ -190,7 +196,7 @@ export class XpellEngine {
      * @param {string} moduleName - name of the loaded module
      * @returns {XModule}
      */
-    getModule(moduleName:string):XModule{
+    getModule(moduleName: string): XModule {
         return this._modules[moduleName]
     }
 
@@ -202,8 +208,12 @@ export class XpellEngine {
         this.onFrame()
     }
 
-    getParam(name:string,defaultValue?:string,):any {
-        return XData._o[name]
+    /**
+     * deprecated - use XData._o directly
+     */
+    getParam(name: string, defaultValue?: string,): any {
+        return (name in XData._o) ? XData._o[name] : defaultValue;
+
     }
 
 }
@@ -217,12 +227,12 @@ export const Xpell = new XpellEngine()
 export default Xpell
 
 
-export {Xpell as _x} 
-export {XUtils,XUtils as _xu} from "./XUtils"
-export {XData,XData as _xd,type XDataObject,type XDataVariable,_XData} from "./XData"
-export {XParser} from "./XParser"
-export {XCommand,type XCommandData} from "./XCommand"
-export {XLogger,XLogger as _xlog,_XLogger} from "./XLogger"
+export { Xpell as _x }
+export { XUtils, XUtils as _xu } from "./XUtils"
+export { XData, XData as _xd, type XDataObject, type XDataVariable, _XData } from "./XData"
+export { XParser } from "./XParser"
+export { XCommand, type XCommandData } from "./XCommand"
+export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
 export {
     XModule,
     type XModuleData,
@@ -231,15 +241,23 @@ export {
 export {
     XObject,
     XObjectPack,
+    type XValue,
     type IXData,
-    type IXObjectData,
+    // type IXObjectData,
     type XDataXporter,
     type XDataXporterHandler,
     type XObjectData,
     type XObjectOnEventIndex,
     type XObjectOnEventHandler
 } from "./XObject"
-export {XObjectManager} from "./XObjectManager"
-export {XEventManager, XEventManager as _xem,type XEventListener,type XEvent,type XEventListenerOptions,_XEventManager,type HTMLEventListenersIndex} from "./XEventManager"
-export {type XNanoCommandPack,type XNanoCommand} from "./XNanoCommands"
-export {XParams} from "./XParams"
+export { XObjectManager } from "./XObjectManager"
+export {
+  XEventManager,
+  XEventManager as _xem,
+  _XEventManager,
+  type XEventListener,
+  type XEventListenerOptions,
+} from "./XEventManager.js";
+export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands"
+export { XParams } from "./XParams"
+export {XError, type XErrorOptions, type XErrorLevel, type XErrorMeta} from "./XError"

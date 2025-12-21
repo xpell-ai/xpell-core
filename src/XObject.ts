@@ -33,9 +33,7 @@ import { XEventListenerOptions, XEventManager as _xem } from "./XEventManager";
 import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
 import _xd, { XDataObject } from "./XData";
 
-export interface IXData {
-    [k: string]: string | null | [] | undefined | Function | boolean | number | {}
-}
+
 
 export type wordsList = {
     [k: string]: string
@@ -44,28 +42,23 @@ export type wordsList = {
 const reservedWords: wordsList = { _children: "child nodes" }
 // const xpell_object_html_fields_mapping = { "_id": "id", "css-class": "class", "animation": "xyz", "input-type": "type" };
 
-/**
- * XObject constructor data interface 
- * @interface IXObjectData
- * @param _xversion - minimum Xpell interpreter version (optional default value is 1.0)
- * @deprecated use XObjectData type instead instead
- */
-export interface IXObjectData extends IXData {
-    [k: string]: string | null | [] | undefined | Function | boolean | number | {}
-    _id?: string;
-    _type: string;
-    _children?: Array<XObject | XObjectData>
-    _name?: string
-    _data_source?: string
-    _on?: XObjectOnEventIndex
-    _on_create?: string | Function | undefined
-    _on_mount?: string | Function | undefined
-    _on_frame?: string | Function | undefined
-    _on_data?: string | Function | undefined
-    _process_frame?: boolean
-    _process_data?: boolean
 
+
+export type XValue =
+    | string
+    | number
+    | boolean
+    | null
+    | undefined
+    | Function
+    | XValue[]
+    | { [k: string]: XValue };
+
+export interface IXData {
+    [k: string]: XValue;
 }
+
+
 
 export interface XDataXporterHandler {
     (inst: any): any
@@ -89,23 +82,30 @@ export interface XObjectOnEventIndex {
 }
 
 export type XObjectData = {
-    [k: string]: string | null | [] | undefined | Function | boolean | number | {}
-    _id?: string;
-    _type?: string;
-    _children?: Array<XObject | XObjectData>
-    _name?: string
-    _data_source?: string
-    _on?: XObjectOnEventIndex
-    _once?: XObjectOnEventIndex
-    _on_create?: string | Function | undefined
-    _on_mount?: string | Function | undefined
-    _on_frame?: string | Function | undefined
-    _on_data?: string | Function | undefined
-    _process_frame?: boolean
-    _process_data?: boolean
-    _nano_commands?: XNanoCommandPack
-    _debug?: boolean //debug mode for the XObject
-}
+  [k: string]: XValue;
+
+  _id?: string;
+  _type?: string; // keep optional if you rely on defaults in constructors
+  _children?: Array<XObject | XObjectData>;
+
+  _name?: string;
+  _data_source?: string;
+
+  _on?: XObjectOnEventIndex;
+  _once?: XObjectOnEventIndex;
+
+  _on_create?: string | Function;
+  _on_mount?: string | Function;
+  _on_frame?: string | Function;
+  _on_data?: string | Function;
+
+  _process_frame?: boolean;
+  _process_data?: boolean;
+
+  _nano_commands?: XNanoCommandPack;
+  _debug?: boolean;
+};
+
 
 /**
  * XObject class
@@ -141,11 +141,13 @@ export class XObject {
     protected _nano_commands: { [k: string]: XNanoCommand } = {}
     protected _cache_cmd_txt?: string;
     protected _cache_jcmd?: any;
-    protected _event_listeners_ids: { [eventName: string]: string } = {}
+    protected _event_listeners_ids: { [eventName: string]: string[] } = {}
+    protected _event_parsed: boolean = false
+    protected _mounted: boolean = false
     protected _xporter: XDataXporter = {
-        _ignore_fields: ["_to_xdata_ignore_fields", "_xporter", "_children", "_on", "_once", 
-        "_on_create", "_on_mount", "_on_frame", "_on_data", "_process_frame", "_process_data", 
-        "_parent","_event_listeners_ids","_event_parsed", "_debug"],
+        _ignore_fields: ["_to_xdata_ignore_fields", "_xporter", "_children", "_on", "_once",
+            "_on_create", "_on_mount", "_on_frame", "_on_data", "_process_frame", "_process_data",
+            "_parent", "_event_listeners_ids", "_event_parsed", "_mounted", "_debug"],
         _instance_xporters: {}
     }
 
@@ -167,11 +169,11 @@ export class XObject {
         this._children = []
         this._nano_commands = {}
         this.addNanoCommandPack(_xobject_basic_nano_commands)
-        if(data && data.hasOwnProperty("_nano_commands") && data._nano_commands) {
+        if (data && data.hasOwnProperty("_nano_commands") && data._nano_commands) {
             this.addNanoCommandPack(data._nano_commands)
             delete data._nano_commands //important to delete the nano commands from the data
         }
-            
+
 
         //add Xporter ignore field and instance handler (uses as example also)
         this.addXporterDataIgnoreFields(["_nano_commands"])
@@ -181,16 +183,16 @@ export class XObject {
         this._xem_options = {
             // _instance:_xem
             // _object: this
-            _support_html: true
+            // _support_html: true
         }
-        if(!skipParse && data) this.parse(data, reservedWords); 
+        if (!skipParse && data) this.parse(data, reservedWords);
         // this.init(data, skipParse)
 
 
     }
 
 
-    log(message?: any, ...optionalParams: any[]){
+    log(message?: any, ...optionalParams: any[]) {
         if (this._debug) {
             if (message) {
                 _xlog.log(this._type + "->" + this._id + "]", message, ...optionalParams)
@@ -232,7 +234,7 @@ export class XObject {
 
             Object.keys(this._once).forEach(eventName => {
                 this.addEventListener(eventName, this._once[eventName], onceOptions)
-                
+
             })
             this._event_parsed = true
         }
@@ -249,9 +251,9 @@ export class XObject {
                 handler(this, eventData)
             }
         }
-        else if(typeof handler === "string") {
+        else if (typeof handler === "string") {
             _final_handler = async (eventData?: any) => {
-                const _final_xscript = this._id + " " + handler + " event-data='" + JSON.stringify(eventData).replace(/'/g, "\\'") +"'"
+                const _final_xscript = this._id + " " + handler + " event-data='" + JSON.stringify(eventData).replace(/'/g, "\\'") + "'"
                 await this.run(_final_xscript) //run the nano command
             }
         }
@@ -259,13 +261,19 @@ export class XObject {
             throw new Error("event handler must be a function")
         }
         const event_listener_id = _xem.on(eventName, _final_handler, options, this)
-        this._event_listeners_ids[eventName] = event_listener_id
+        if (!this._event_listeners_ids[eventName]) {
+            this._event_listeners_ids[eventName] = []
+        }
+        this._event_listeners_ids[eventName].push(event_listener_id)
     }
 
 
     removeEventListener(eventName: string) {
-        if (this._event_listeners_ids[eventName]) {
-            _xem.remove(this._event_listeners_ids[eventName])
+        const listenerIds = this._event_listeners_ids[eventName]
+        if (listenerIds && listenerIds.length) {
+            listenerIds.forEach((listenerId) => {
+                _xem.remove(listenerId)
+            })
             delete this._event_listeners_ids[eventName]
         }
     }
@@ -337,7 +345,7 @@ export class XObject {
      * @param data data to parse
      * @param ignore - lis of words to ignore in the parse process
      */
-    parse(data: XObjectData, ignore:any = reservedWords) {
+    parse(data: XObjectData, ignore: any = reservedWords) {
 
         let cdata = Object.keys(data);
         cdata.forEach(field => {
@@ -412,8 +420,6 @@ export class XObject {
         } else if (this._once && this._once["create"]) {
             this.checkAndRunInternalFunction(this._once["create"])
         }
-
-    
     }
 
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
@@ -435,10 +441,10 @@ export class XObject {
      */
     async onMount() {
 
-        if(this._mounted) return
+        if (this._mounted) return
         //parse events after dom creation
         this.parseEvents(this._xem_options)
-        
+
 
 
         //run on mount event
@@ -549,13 +555,13 @@ export class XObject {
 
     async run(nanoCommand: string, cache = true) {
 
-        let jcmd: XCommand = (this._cache_cmd_txt && this._cache_cmd_txt == nanoCommand) ? <XCommand>this._cache_jcmd : <any>XParser.parseXpellCommand(nanoCommand) //XParser.parse(nanoCommand)        
+        let jcmd: XCommand = (this._cache_cmd_txt && this._cache_cmd_txt == nanoCommand) ? <XCommand>this._cache_jcmd : <any>XParser.parseObjectCommand(nanoCommand) //XParser.parse(nanoCommand)        
         //cache command to prevent parsing in every frame
         if (cache) {
             this._cache_cmd_txt = nanoCommand
             this._cache_jcmd = jcmd
         }
-        this.execute(jcmd) //execute nano commands
+        await this.execute(jcmd) //execute nano commands
 
     }
 
@@ -576,7 +582,7 @@ export class XObject {
 
         if (xCommand._op && this._nano_commands[xCommand._op]) {
             try {
-                this._nano_commands[xCommand._op](<XCommand>xCommand, this)
+                await this._nano_commands[xCommand._op](<XCommand>xCommand, this)
             } catch (err) {
                 _xlog.error(this._id + " has error with command name " + xCommand._op + " " + err)
             }
@@ -596,10 +602,8 @@ export class XObject {
                 this.hasOwnProperty(field) && this[field] !== undefined) {
                 const tf = this[field]
                 if (typeof tf === "function") {
-                    const funcStr = tf.toString()
-                    if (!funcStr.startsWith("class")) { //in case of class reference it being ignored
-                        out[field] = funcStr
-                    }
+                    // Functions are omitted from XData export to avoid serialization of executable code.
+                    return
                 } else if (typeof tf === "object") {
                     const xporters = Object.keys(this._xporter._instance_xporters)
                     let regField = true
@@ -612,7 +616,7 @@ export class XObject {
                     })
 
                     if (regField) {
-                        out[field] = tf
+                        out[field] = tf as any
                     }
                 }
                 else {
@@ -657,7 +661,7 @@ export class XObject {
      * Dispose the XObject and all its children
      */
     async dispose() {
-        if(this._parent) {
+        if (this._parent) {
             //remove the instance from the parent children array
             const index = this._parent._children.indexOf(this)
             if (index > -1) this._parent._children.splice(index, 1)
@@ -689,15 +693,15 @@ export class XObject {
             if (index > -1) this._children.splice(index, 1)
             child._parent = null
         }
-        
+
     }
 
     /**
      * @param child - the child to add
+     * @deprecated use append method instead
      */
     addChild(child: XObject) {
-        this._children.push(child)
-        child._parent = this
+        this.append(child)
     }
 
 }

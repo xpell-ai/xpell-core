@@ -1,21 +1,19 @@
+// xpell-core/vite.config.ts
 import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
     lib: {
       entry: "src/index.ts",
-      name: "XpellCore", // UMD global name (fine)
+      name: "XpellCore",
+      formats: ["es", "cjs"],
       fileName: (format) =>
-        format === "es"
-          ? "xpell-core.es.js"   // ⬅ ES module bundle
-          : "xpell-core.cjs.js"  // ⬅ CJS bundle
+        format === "es" ? "xpell-core.es.js" : "xpell-core.cjs.js",
     },
     rollupOptions: {
-      external: [], // add externals here later if needed
-      output: {
-        exports: "named"
-      }
+      external: [],
+      output: { exports: "named" },
     },
-    outDir: "dist"
-  }
+    outDir: "dist",
+  },
 });

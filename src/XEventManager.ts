@@ -1,271 +1,172 @@
+// ============================================================================
+// xpell-core/src/XEventManager.ts
+// PATCH: adds _owner/_tag to options, keeps backward compatibility
+// ============================================================================
+
 /**
- * XEventManager — Runtime Event System
+ * XEventManager — Runtime Event System (Core)
  *
- * Central event dispatching and subscription engine for the Xpell runtime.
+ * Platform-neutral pub/sub event bus for the Xpell runtime.
  *
- * `XEventManager` (exposed as `_xem`) provides a lightweight, decoupled
- * pub/sub mechanism used across Xpell modules to communicate via events
- * without introducing direct dependencies.
- *
- * ---
- *
- * ## Responsibilities
- *
- * - Register event listeners (`on`)
- * - Dispatch events with payloads (`fire`)
- * - Support scoped, instance-bound, and one-time listeners
- * - Manage listener lifecycle and cleanup
- *
- * ---
- *
- * ## Usage
- *
- * ### Listen to an event
- *
- * ```ts
- * _xem.on("my-event", (eventName, data) => {
- *   console.log("XEM Event", eventName, data)
- * })
- * ```
- *
- * ### Fire an event
- *
- * ```ts
- * _xem.fire("my-event", { _data_param: "my data" })
- * ```
- *
- * ---
- *
- * XEventManager is infrastructure-only and does not assume
- * UI, navigation, or data-layer semantics.
- *
- * One-liner: XEventManager decouples runtime behavior through events.
+ * - No DOM
+ * - No Node EventEmitter
+ * - Deterministic listener bookkeeping
  *
  * @packageDocumentation
  * @file XEventManager.ts
- * @since 2022-07-22
- * @author Tamir Fridman
- * @license MIT
- * @copyright
- * © 2022–present Aime Technologies. All rights reserved.
  */
 
-import { _xlog } from "./XLogger"
-import { XUtils as _xu } from "./XUtils"
-
-
-
-export type XEvent = {
-    _id: number
-    _name: string
-    _data: any,
-}
-
-
-// export type XEventListenerOptions =  {
-//     _once?: boolean
-//     _instance?: _XEventManager
-// }
-
-export type HTMLEventListenersIndex = {
-    [id: string]: {
-        _listener: Function
-        _event_name: string,
-        _object?: any
-    }
-}
+import { _xlog } from "./XLogger.js";
+import { XUtils as _xu } from "./XUtils.js";
 
 export type XEventListenerOptions = {
-    _once?: boolean,
-    _support_html?: boolean
-    // _instance?: _XEventManager,
-    // _object?: any
-}
+  _once?: boolean;
+  _owner?: any;
+  _tag?: string;
+};
 
-
-// (data: any): void
-
-/**
- * This interface define the listener callable function (provided with "on" method)
- */
 export interface XEventListener {
-    _id?: string
-    _callback?: Function
-    _nano_command?: string,
-    _options?: XEventListenerOptions
-    // _object?: any
+  _id: string;
+  _callback: Function;
+  _options?: XEventListenerOptions;
+  _owner?: any; // kept for fast owner cleanup + legacy compatibility
+  _tag?: string;
+}
+
+export type XEventListenerId = string;
+
+export class _XEventManager {
+  _log_rules: {
+    register: boolean;
+    remove: boolean;
+    fire: boolean;
+  } = {
+    register: false,
+    remove: false,
+    fire: false,
+  };
+
+  // eventName -> listeners[]
+  protected _events: Record<string, XEventListener[]> = {};
+
+  // listenerId -> eventName
+  protected _listener_index: Record<string, string> = {};
+
+  constructor() {}
+
+  /**
+   * Register a listener on an event name (runtime bus only).
+   *
+   * Backward compatible:
+   * - Canonical: on(name, cb, { _once, _owner, _tag })
+   * - Legacy:   on(name, cb, { _once }, owner)
+   */
+  on(
+    event_name: string,
+    listener: Function,
+    options: XEventListenerOptions = {},
+    owner?: any
+  ): XEventListenerId {
+    if (!this._events[event_name]) this._events[event_name] = [];
+
+    const resolved_owner = options?._owner ?? owner;
+
+    const id = _xu.guid();
+    const xlistener: XEventListener = {
+      _id: id,
+      _callback: listener,
+      _options: options,
+      _owner: resolved_owner,
+      _tag: options?._tag,
+    };
+
+    this._events[event_name].push(xlistener);
+    this._listener_index[id] = event_name;
+
+    if (this._log_rules.register) _xlog.log("XEM Register", event_name, id);
+    return id;
+  }
+
+  /**
+   * Register a listener that will be removed after first fire.
+   */
+  once(event_name: string, listener: Function, owner?: any): XEventListenerId {
+    return this.on(event_name, listener, { _once: true, _owner: owner });
+  }
+
+  /**
+   * Fire an event with optional payload.
+   */
+  async fire(event_name: string, data?: any): Promise<void> {
+    const list = this._events[event_name];
+    if (!list || list.length === 0) return;
+
+    if (this._log_rules.fire) _xlog.log("XEM Fire", event_name, data);
+
+    // snapshot to avoid issues if listeners mutate subscriptions during dispatch
+    const snapshot = list.slice();
+    const to_remove: string[] = [];
+
+    for (const l of snapshot) {
+      try {
+        if (l && l._callback) l._callback(data);
+      } catch (e) {
+        _xlog.error(e);
+      }
+      if (l?._options?._once) to_remove.push(l._id);
+    }
+
+    for (const id of to_remove) this.remove(id);
+  }
+
+  /**
+   * Remove a listener by id.
+   */
+  remove(listener_id: string): void {
+    const event_name = this._listener_index[listener_id];
+    if (!event_name) return;
+
+    const list = this._events[event_name];
+    if (list && list.length) {
+      const idx = list.findIndex((l) => l?._id === listener_id);
+      if (idx >= 0) list.splice(idx, 1);
+      if (list.length === 0) delete this._events[event_name];
+    }
+
+    delete this._listener_index[listener_id];
+
+    if (this._log_rules.remove) _xlog.log("XEM Remove", event_name, listener_id);
+  }
+
+  /**
+   * Remove all listeners for a given owner reference.
+   */
+  removeOwner(owner: any): void {
+    if (!owner) return;
+
+    const ids: string[] = [];
+    for (const list of Object.values(this._events)) {
+      for (const l of list) {
+        const l_owner = l?._owner ?? l?._options?._owner;
+        if (l_owner === owner) ids.push(l._id);
+      }
+    }
+    ids.forEach((id) => this.remove(id));
+  }
+
+  /**
+   * Clear the entire event bus (mostly for tests / hard reset).
+   */
+  clear(): void {
+    this._events = {};
+    this._listener_index = {};
+  }
 }
 
 /**
- * XEventDispatcher is the system event dispatcher and manager
+ * Global Xpell event manager instance.
  */
-export class _XEventManager {
-    _log_rules: {
-        fire: any
-        register: boolean,
-        remove: boolean,
+export const XEventManager = new _XEventManager();
+export const _xem = XEventManager;
 
-    } = {
-            register: false,
-            remove: false,
-            fire: false
-        }
-
-    //events dictionary object and listeners list
-    protected _events: { [name: string]: Array<XEventListener> }
-    protected _listeners_to_event_index: { [listernerId: string]: string } = {}
-    protected _html_event_listeners: HTMLEventListenersIndex = {}
-
-    constructor() {
-        this._events = {}
-    }
-
-    /**
-     * This method listen to event name and register the listener function
-     * @param eventName event name to listen to
-     * @param listener listener function to be called when event fired
-     * @returns listener id
-     * @example
-     *     // listen to event name "my-event" and display the event data to the console when fired
-     *    _xem.on("my-event",(data)=>{
-     *         console.log("XEM Event " + data)
-     *    })
-     */
-    onEvent(eventName: string, listener: Function, options?: XEventListenerOptions, callObj?: any): string {
-        if (!this._events[eventName]) {
-            this._events[eventName] = [];
-        }
-        const xlistener:XEventListener = {
-            _id: _xu.guid(),
-            _options: options,
-            // _object: callObj,
-            _callback: listener,
-        }
-        // listener._id = _xu.guid()
-        // listener._options = options
-        // listener._object = callObj
-        this._events[eventName].push(xlistener)
-        this._listeners_to_event_index[<any>xlistener._id] = eventName
-        if (this._log_rules.register) _xlog.log("XEM Register " + eventName, xlistener._id)
-        return <any>xlistener._id
-    }
-
-    /**
-   * This method listen to event name and register the listener function
-   * @param eventName event name to listen to
-   * @param listener listener function to be called when event fired
-   * @returns listener id
-   * @example
-   *     // listen to event name "my-event" and display the event data to the console when fired
-   *    _xem.on("my-event",(data)=>{
-   *         console.log("XEM Event " + data)
-   *    })
-   */
-    on(eventName: string, listener: Function, options: XEventListenerOptions = {
-        _once: false,
-        _support_html: true
-    }, callObject?: any): string {
-        const id = this.onEvent(eventName, listener, options, callObject)
-
-        if (options) {
-            const htmlListener: EventListener = (e: Event) => {
-                const dout = (e instanceof CustomEvent) ? e.detail : e
-                listener(dout)
-                if(options._once) this.remove(id)
-            }
-            if (callObject ) {
-                callObject.dom.addEventListener(eventName, htmlListener)
-                if (this._log_rules.register) _xlog.log("XEM Register  " + eventName + " to " + callObject._id)
-            } else {
-                document.addEventListener(eventName, htmlListener)
-                if (this._log_rules.register) _xlog.log("XEM Register  " + eventName + " to document")
-            }
-            this._html_event_listeners[id] = {
-                _event_name: eventName,
-                _listener: htmlListener,
-                _object: callObject
-            }
-
-        }
-        return id
-    }
-
-    /**
-     * This method listen to event name and register the listener function
-     * The listener will be removed after first fire
-     * @param eventName event name to listen to
-     * @param listener listener function to be called when event fired
-     * @returns listener id
-     */
-    once(eventName: string, listener: Function, callObject: any = null) {
-        return this.on(eventName, listener, { _once: true }, callObject)
-    }
-
-    /**
-     * This method remove listener by listener id
-     * @param listenerId listener id to remove
-     */
-    removeEvent(listenerId: string) {
-        if (this._listeners_to_event_index[listenerId]) {
-            const eventName = this._listeners_to_event_index[listenerId]
-            this._events[eventName].forEach((listener, index) => {
-                if (listener._id == listenerId) {
-                    this._events[eventName][index] = null as any
-                    this._events[eventName].splice(index, 1)
-                }
-            })
-            delete this._listeners_to_event_index[listenerId]
-            if (this._log_rules.remove) _xlog.log("XEM Remove " + eventName, listenerId)
-        }
-    }
-
-    /**
-   * 
-   * @override    
-   * @param listenerId 
-   */
-    remove(listenerId: string): void {
-        if (this._html_event_listeners[listenerId]) {
-            const eventName = this._html_event_listeners[listenerId]._event_name
-            const listener = this._html_event_listeners[listenerId]._listener
-            const obj = this._html_event_listeners[listenerId]._object
-            if(obj) obj.dom.removeEventListener(eventName, listener)
-            else document.removeEventListener(eventName, <any>listener)
-        }
-        this.removeEvent(listenerId)
-    }
-
-
-    /**
-     *  This method is used to fire an event
-     * @override
-     * @param eventName - the name of the event
-     * @param data - the data to pass to the event
-     * @param supportHtmlEvents - if true the event will be fired as HTML event too
-     */
-    async fire(eventName: string, data?: any, callObject?: any) {
-        const xevt: XEventListener[] | undefined = this._events[eventName]
-        if (xevt) {
-            const eventsToRemove: Array<string> = []
-            xevt.forEach((listener) => {
-                if(listener._callback) listener._callback(data)
-                if (listener._options && listener._options._once && listener._id) {
-                    eventsToRemove.push(listener._id)
-                }
-            });
-            eventsToRemove.forEach((listenerId) => this.remove(listenerId))
-        }
-
-    }
-
-
-
-
-}
-
-
-export const XEventManager = new _XEventManager()
-
-export default XEventManager
-
-
+export default XEventManager;

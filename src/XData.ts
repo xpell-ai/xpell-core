@@ -1,51 +1,61 @@
 /**
  * XData — Global Runtime Shared State
  *
- * Central in-memory data store for the Xpell runtime.
+ * Central in-memory shared state for the Xpell runtime.
  *
- * `XData` provides a real-time, process-wide shared memory
- * accessible to all Xpell modules and components. It is used
- * to store and retrieve primitive values and structured objects
- * by identifier.
+ * `XData` provides process-wide shared memory accessible to all
+ * Xpell modules and runtime components. It is designed for
+ * explicit, lightweight state sharing during execution.
+ *
+ * XData is NOT a persistence mechanism.
  *
  * ---
  *
  * ## Responsibilities
  *
- * - Provide shared access to primitive variables (`_v`)
- * - Provide shared access to structured objects (`_o`)
- * - Enable lightweight state sharing across modules
- * - Support real-time read/write access patterns
+ * - Provide shared access to structured runtime objects (`_o`)
+ * - Enable explicit state sharing across modules
+ * - Act as a single source of truth for shared runtime values
+ *
+ * ---
+ *
+ * ## Access
+ *
+ * XData can be accessed either directly or via the engine alias:
+ *
+ * - `XData._o[...]`
+ * - `_xd._o[...]` (engine-provided alias)
  *
  * ---
  *
  * ## Usage
  *
- * ### Store a primitive value
- * ```ts
- * XData._v["my-var-id"] = "my-var-value"
- * ```
- *
- * ### Read a primitive value
- * ```ts
- * const v = XData._v["my-var-id"]
- * ```
- *
  * ### Store an object
  * ```ts
- * XData._o["my-object-id"] = { my: "object" }
+ * XData._o["object-name"] = { /* data *\/ };
+ * _xd._o["object-name"] = { /* data *\/ };
  * ```
  *
  * ### Read an object
  * ```ts
- * const o = XData._o["my-object-id"]
+ * const obj = XData._o["object-name"];
+ * const obj = _xd._o["object-name"];
  * ```
  *
  * ---
  *
- * XData is a runtime convenience layer and not a persistence mechanism.
+ * ## Rules
  *
- * One-liner: XData is the shared memory of the Xpell runtime.
+ * - XData is process-wide and shared across all modules
+ * - Mutations must be explicit and traceable
+ * - Keys must be stable, named, and documented at their point of use
+ * - Do not mirror XData into hidden local mutable state
+ * - Do not assume persistence or durability
+ *
+ * ---
+ *
+ * One-liner:
+ * XData is the shared runtime memory of the Xpell engine.
  *
  * @packageDocumentation
  * @since 2022-07-22
@@ -55,15 +65,13 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
+
 export type XDataObject = {[_id: string ]: any}
 export type XDataVariable = {[_id: string ]: string | number | boolean}
 
 
 export class _XData {
-    //deprecated use  _o instead
-    objects: XDataObject = {}
-    variables: XDataVariable = {}
-
+    
 
     #_objects: XDataObject = {}
 
