@@ -1,154 +1,176 @@
-/**
- * XData — Global Runtime Shared State
- *
- * Central in-memory shared state for the Xpell runtime.
- *
- * `XData` provides process-wide shared memory accessible to all
- * Xpell modules and runtime components. It is designed for
- * explicit, lightweight state sharing during execution.
- *
- * XData is NOT a persistence mechanism.
- *
- * ---
- *
- * ## Responsibilities
- *
- * - Provide shared access to structured runtime objects (`_o`)
- * - Enable explicit state sharing across modules
- * - Act as a single source of truth for shared runtime values
- *
- * ---
- *
- * ## Access
- *
- * XData can be accessed either directly or via the engine alias:
- *
- * - `XData._o[...]`
- * - `_xd._o[...]` (engine-provided alias)
- *
- * ---
- *
- * ## Usage
- *
- * ### Store an object
- * ```ts
- * XData._o["object-name"] = { /* data *\/ };
- * _xd._o["object-name"] = { /* data *\/ };
- * ```
- *
- * ### Read an object
- * ```ts
- * const obj = XData._o["object-name"];
- * const obj = _xd._o["object-name"];
- * ```
- *
- * ---
- *
- * ## Rules
- *
- * - XData is process-wide and shared across all modules
- * - Mutations must be explicit and traceable
- * - Keys must be stable, named, and documented at their point of use
- * - Do not mirror XData into hidden local mutable state
- * - Do not assume persistence or durability
- *
- * ---
- *
- * One-liner:
- * XData is the shared runtime memory of the Xpell engine.
- *
- * @packageDocumentation
- * @since 2022-07-22
- * @author Tamir Fridman
- * @license MIT
- * @copyright
- * © 2022–present Aime Technologies. All rights reserved.
- */
+export type XDataStore = Record<string, any>;
 
+export type XDataMeta = {
+    source?: string;           // "engine", "xvm", "xui", "legacy", etc.
+    trace?: boolean;           // dev: capture stack
+};
 
-export type XDataObject = {[_id: string ]: any}
-export type XDataVariable = {[_id: string ]: string | number | boolean}
+export type XDataChange = {
+    key: string;
+    value: any;
+    prev: any;
+    ts: number;
+    op: "set" | "delete" | "touch" | "patch";
+    meta?: XDataMeta;
+    stack?: string;
+};
 
+export type XDataListener = (change: XDataChange) => void;
 
+// XData2
 export class _XData {
-    
+    // shared objects map
+    private _objects: XDataStore = {};
 
-    #_objects: XDataObject = {}
+    // listeners
+    private _listeners: Map<string, Set<XDataListener>> = new Map();
+    private _any_listeners: Set<XDataListener> = new Set();
 
-    constructor(){
-        this.#_objects = {}
+    // compat / dev knobs
+    public _compat_writes = true;       // legacy `_o[key]=...` triggers notifications
+    public _warn_legacy_writes = true;   // dev warnings for `_o[key]=...`
+    public _verbose = false;           // enables trace capture when meta.trace=true
+
+    public _compat_legacy_keys = true;  // support legacy keys for compatibility
+
+    private _o_proxy: XDataStore | null = null;
+
+    constructor() {
+        this._objects = {};
     }
 
-
-    
-
     /**
-     * This method gets the XData object
-     * @returns XDataObject object
-     * @example
-     *  // get the XDataObject object
-     *  const o = XData._o["my-object-id"]
-     *  // set the XDataObject object
-     *  XData._o["my-object-id"] = {my:"object"}
+     * Shared memory view.
+     * Reads are always supported.
+     * Writes are supported in compat mode (optional) and should be migrated to set()/delete()/touch().
      */
-    get _o(){
-        return this.#_objects
+
+    get _o(): XDataStore {
+        if (!this._compat_writes && !this._warn_legacy_writes) return this._objects;
+
+        if (!this._o_proxy) {
+            this._o_proxy = new Proxy(this._objects, {
+                set: (t, prop, value) => {
+                    const key = String(prop);
+
+                    if (this._warn_legacy_writes) {
+                        console.warn(
+                            `[XData] Legacy write: _o["${key}"] = ... ; prefer XData.set("${key}", value).`
+                        );
+                    }
+
+                    if (this._compat_writes) this.set(key, value, { source: "legacy:_o" });
+                    else (t as any)[key] = value;
+
+                    return true;
+                },
+                deleteProperty: (t, prop) => {
+                    const key = String(prop);
+
+                    if (this._warn_legacy_writes) {
+                        console.warn(
+                            `[XData] Legacy delete: delete _o["${key}"] ; prefer XData.delete("${key}").`
+                        );
+                    }
+
+                    if (this._compat_writes) this.delete(key, { source: "legacy:_o" });
+                    else delete (t as any)[key];
+
+                    return true;
+                }
+            }) as XDataStore;
+        }
+
+        return this._o_proxy;
     }
 
-
-    /**
-     * This method adds an object to the XData object
-     * @param objectId 
-     * @param object
-     * @remark It is also possible to use the XData._o property -> XData._o["my-object-id"] = {my:"object"} 
-     * */
-    set(objectId:string, object:any) {
-        this.#_objects[objectId] = object
+    /** Preferred read API */
+    get<T = any>(key: string): T | undefined {
+        return this._objects[key] as T;
     }
 
-    /**
-     * This method checks if the XData object has an object by id
-     * @param objectId
-     * @returns boolean
-     * @remark It is also possible to query the XData._o property -> if(XData._o["my-object-id"])...
-     * */
-    has(objectId:string):boolean {
-        return this.#_objects.hasOwnProperty(objectId)
+    /** Preferred write API */
+    set(key: string, value: any, meta?: XDataMeta) {
+        const prev = this._objects[key];
+        this._objects[key] = value;
+        this._emit({ key, value, prev, ts: Date.now(), op: "set", meta });
     }
 
-    /**
-     * Deletes an object from the XData object
-     * @param objectId 
-     */
-    delete(objectId:string) {
-        delete this.#_objects[objectId]
+    /** Shallow merge helper (nice for state objects) */
+    patch(key: string, partial: Record<string, any>, meta?: XDataMeta) {
+        const prev = this._objects[key];
+        const base = prev && typeof prev === "object" ? prev : {};
+        const value = { ...base, ...partial };
+        this._objects[key] = value;
+        this._emit({ key, value, prev, ts: Date.now(), op: "patch", meta });
     }
 
-    /**
-     * Gets an object and delete it from the XData object list
-     * @param objectId 
-     * @returns 
-     */
-    pick(objectId:string) {
-        const obj = this.#_objects[objectId]
-        this.delete(objectId)
-        return obj
+    /** In-place mutation notifier */
+    touch(key: string, meta?: XDataMeta) {
+        const value = this._objects[key];
+        this._emit({ key, value, prev: value, ts: Date.now(), op: "touch", meta });
     }
 
-
-    /**
-     * This method cleans the XData Memory
-     */
-    clean(){
-        this.#_objects = {}
+    has(key: string): boolean {
+        return Object.prototype.hasOwnProperty.call(this._objects, key);
     }
 
+    delete(key: string, meta?: XDataMeta) {
+        const prev = this._objects[key];
+        delete this._objects[key];
+        this._emit({ key, value: undefined, prev, ts: Date.now(), op: "delete", meta });
+    }
 
+    pick<T = any>(key: string, meta?: XDataMeta): T | undefined {
+        const v = this._objects[key] as T;
+        this.delete(key, meta);
+        return v;
+    }
+
+    clean() {
+        this._objects = {};
+        // keep listeners by default (predictable). If you want a full reset, add clean({clearListeners:true})
+    }
+
+    // ----------------------------
+    // Subscriptions
+    // ----------------------------
+
+    on(key: string, fn: XDataListener): () => void {
+        let set = this._listeners.get(key);
+        if (!set) this._listeners.set(key, (set = new Set()));
+        set.add(fn);
+        return () => this.off(key, fn);
+    }
+
+    off(key: string, fn: XDataListener) {
+        const set = this._listeners.get(key);
+        if (!set) return;
+        set.delete(fn);
+        if (set.size === 0) this._listeners.delete(key);
+    }
+
+    onAny(fn: XDataListener): () => void {
+        this._any_listeners.add(fn);
+        return () => this._any_listeners.delete(fn);
+    }
+
+    // ----------------------------
+    // Emit
+    // ----------------------------
+
+    private _emit(change: XDataChange) {
+        if (this._verbose && change.meta?.trace) {
+            change.stack = new Error().stack;
+        }
+
+        const set = this._listeners.get(change.key);
+        if (set) for (const fn of set) fn(change);
+
+        for (const fn of this._any_listeners) fn(change);
+    }
 }
 
-/**
- * @property 
- */
-export const XData = new _XData()
-
-export default XData
+/** Singleton */
+export const XData = new _XData();
+export default XData;

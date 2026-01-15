@@ -35,19 +35,23 @@
 
 
 /** interface */
-import XCommand from "./XCommand"
-import { XUtils, FPSCalc } from "./XUtils"
+import XCommand, { XCommandData } from "./XCommand"
+import { XUtils, FPSCalc, XFrameScheduler } from "./XUtils"
 import { XLogger as _xlog } from "./XLogger"
 import XData from "./XData"
 import XParser from "./XParser"
 import XModule from "./XModule"
 import { XEventManager as XEM } from "./XEventManager"
+import { XResponseError } from "./XProtocol"
 
 
 
 
 export const XD_FRAME_NUMBER = "engine:frame-number";
 export const XD_FPS = "engine:fps";
+
+
+
 
 
 /**
@@ -62,9 +66,11 @@ export class XpellEngine {
     private _fps_calc: FPSCalc
 
     private _modules: { [name: string]: any } = {}
+    private _schedule_frame: XFrameScheduler;
     parser: typeof XParser
 
-    constructor() {
+    constructor(opts?: { _target_fps?: number; _schedule_frame?: XFrameScheduler }) {
+        this._schedule_frame = opts?._schedule_frame ?? XUtils.createDefaultScheduler(opts?._target_fps);
         this._version = "0.0.1"
         this._engine_id = XUtils.guid()
         this._frame_number = 0
@@ -78,9 +84,17 @@ export class XpellEngine {
 
 
     /**
+     * @deprecated use _verbose instead
      * Enable Xpell logs to console
      */
     set verbose(val: boolean) {
+        _xlog._enabled = val
+    }
+
+    /**
+     * Enable Xpell logs to console
+     */
+    set _verbose(val: boolean) {
         _xlog._enabled = val
     }
 
@@ -157,7 +171,7 @@ export class XpellEngine {
      * Execute Xpell Command 
      * @param {XCommand} 
      */
-    execute(xcmd: XCommand): any {
+    execute(xcmd: XCommand | XCommandData): any {
         if (xcmd && xcmd._module && this._modules[xcmd._module]) {
             return this._modules[xcmd._module].execute(xcmd)
         } else {
@@ -172,23 +186,31 @@ export class XpellEngine {
      * calls all the sub-modules onFrame methods (if implemented)
      */
     onFrame(): void {
-        this._frame_number++
-        Object.keys(this._modules).forEach(mod => {
+        this._frame_number++;
 
-            if (this._modules[mod].onFrame && typeof this._modules[mod].onFrame === 'function') {
-                this._modules[mod].onFrame(this._frame_number)
+        for (const mod of Object.keys(this._modules)) {
+            const m = this._modules[mod];
+            if (m?.onFrame && typeof m.onFrame === "function") {
+                m.onFrame(this._frame_number);
             }
-        })
-        // legacy keys (deprecated)
-        XData._o["frame-number"] = this._frame_number;
-        XData._o["fps"] = this._fps_calc.calc();
+        }
+
+        const fps = this._fps_calc.calc();
 
         // canonical keys (preferred)
-        XData._o[XD_FRAME_NUMBER] = this._frame_number;
-        XData._o[XD_FPS] = XData._o["fps"];
+        XData.set(XD_FRAME_NUMBER, this._frame_number, { source: "engine" });
+        XData.set(XD_FPS, fps, { source: "engine" });
 
-        requestAnimationFrame(() => this.onFrame());
+        // legacy keys (deprecated) - keep temporarily
+        if (XData._compat_legacy_keys) {
+            XData.set("frame-number", this._frame_number, { source: "engine:legacy" });
+            XData.set("fps", fps, { source: "engine:legacy" });
+        }
+
+        this._schedule_frame(() => this.onFrame());
+
     }
+
 
 
     /**
@@ -228,8 +250,8 @@ export default Xpell
 
 
 export { Xpell as _x }
-export { XUtils, XUtils as _xu } from "./XUtils"
-export { XData, XData as _xd, type XDataObject, type XDataVariable, _XData } from "./XData"
+export { XUtils, XUtils as _xu, _XUtils ,type XFrameScheduler} from "./XUtils"
+export { XData, XData as _xd, type XDataStore, _XData } from "./XData"
 export { XParser } from "./XParser"
 export { XCommand, type XCommandData } from "./XCommand"
 export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
@@ -252,12 +274,13 @@ export {
 } from "./XObject"
 export { XObjectManager } from "./XObjectManager"
 export {
-  XEventManager,
-  XEventManager as _xem,
-  _XEventManager,
-  type XEventListener,
-  type XEventListenerOptions,
+    XEventManager,
+    XEventManager as _xem,
+    _XEventManager,
+    type XEventListener,
+    type XEventListenerOptions,
 } from "./XEventManager.js";
 export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands"
 export { XParams } from "./XParams"
-export {XError, type XErrorOptions, type XErrorLevel, type XErrorMeta} from "./XError"
+export { XError, type XErrorOptions, type XErrorLevel, type XErrorMeta } from "./XError"
+export { type XResponseData, XResponse, XResponseOK, XResponseError } from "./XProtocol"

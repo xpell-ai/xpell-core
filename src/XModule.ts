@@ -69,6 +69,8 @@ export type XModuleData = {
     _name: string
 }
 
+export const XD_MODULE_NUM_OF_OBJECTS = "engine:module:num-of-objects:";
+
 /**
  * Xpell Base Module
  * This class represents xpell base module to be extends
@@ -249,7 +251,14 @@ export class XModule {
                 onFrameCallBack?.onFrame(frameNumber)
             }
         })
-        _xd._o[this._name + "-om-objects"] = keys.length
+        //deprecated usage of _xd
+        //_xd._o[this._name + "-om-objects"] = keys.length
+
+        // new usage of _xd
+        _xd.set(XD_MODULE_NUM_OF_OBJECTS + this._id, keys.length, {
+            source: "xmodule"
+        });
+
     }
 
 

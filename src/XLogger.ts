@@ -1,109 +1,97 @@
 /**
- * XLogger — Xpell Logging Engine
+ * XLogger — Xpell Logging Engine (v2)
  *
- * Central logging facility for the Xpell runtime.
- *
- * Provides a lightweight, unified logging API (`_xlog`) used across
- * all Xpell modules for diagnostics, debugging, and runtime visibility.
- *
- * ---
- *
- * ## Responsibilities
- *
- * - Structured logging for core runtime events
- * - Debug and error reporting across modules
- * - Optional verbosity and filtering controls
- *
- * ---
- *
- * XLogger is infrastructure-only and has no dependency on
- * UI, navigation, or data layers.
- *
- * One-liner: XLogger is the voice of the Xpell runtime.
- *
- * @packageDocumentation
- * @since 2022-07-22
- * @author Tamir Fridman
- * @license MIT
- * @copyright
- * © 2022–present Aime Technologies. All rights reserved.
+ * Dev mode:
+ *   - `_xlog` is mapped to `console` for correct callsites in DevTools.
+ * Production mode:
+ *   - `_xlog` is mapped to `XLogger` for consistent formatting & controls.
  */
 
+export type XLogLevel = "log" | "debug" | "warn" | "error";
 
+export type XLoggerOptions = {
+    _enabled?: boolean;
+    _show_date?: boolean;
+    _show_time?: boolean;
+    _debug?: boolean;
+};
 
-/**
- * @class XLoggerEngine Xpell Logger engine
- */
-export class _XLogger  {
-    /**
-     * Enable logger activity if false no logs will be displayed
-     */
-    _enabled: boolean = true
-    /**
-     * Show the date in every log message
-     */
-    _show_date:boolean = false
-    /**
-     * Show the Time in every log message
-     */
-    _show_time:boolean = true
-    _debug: boolean = false //debug mode for the logger
+export class _XLogger {
+    _enabled: boolean = true;
+    _show_date: boolean = false;
+    _show_time: boolean = true;
+    _debug: boolean = false;
 
-    constructor() {
+    constructor(opts?: XLoggerOptions) {
+        if (opts) this.configure(opts);
     }
 
-    /**
-     * Generates the log output date/time signature (affected by showDate & showTime properties)
-     * @returns {string}
-     */
-    private getLogDateTimeSignature():string {
-        const d = new Date()
-
-        const getDate = () => {return (this._show_date) ? d.getDate() + '.' + d.getMonth() + '.' + d.getFullYear() + " ": "" }
-        const getTime = () => {return (this._show_time) ?d.getHours() + ':' + d.getMinutes() + ':' + d.getSeconds() + "." + d.getMilliseconds() +"|": "" }
-        return  getDate() + getTime()
+    configure(opts: XLoggerOptions) {
+        if (typeof opts._enabled === "boolean") this._enabled = opts._enabled;
+        if (typeof opts._show_date === "boolean") this._show_date = opts._show_date;
+        if (typeof opts._show_time === "boolean") this._show_time = opts._show_time;
+        if (typeof opts._debug === "boolean") this._debug = opts._debug;
     }
 
-    /**
-     * Log a message to the output log (console)
-     * @param message - message to present
-     * @param optionalParams 
-     */
-    log(message?: any, ...optionalParams: any[]) {
-        if (this._enabled) {
-            var args = Array.prototype.slice.call(arguments);
-            args.unshift(this.getLogDateTimeSignature());
-            console.log.apply(console, args);
-        }
+    private _dt(): string {
+        const d = new Date();
+
+        const dd = this._show_date
+            ? `${d.getDate()}.${d.getMonth()}.${d.getFullYear()} `
+            : "";
+
+        const tt = this._show_time
+            ? `${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}.${d.getMilliseconds()}|`
+            : "";
+
+        return dd + tt;
     }
 
-    /**
-     * Log an error message to the output log (console)
-     * @param message - message to present
-     * @param optionalParams 
-     */
-    error(message?: any, ...optionalParams: any[]) {
-        var args = Array.prototype.slice.call(arguments);
-        args.unshift(this.getLogDateTimeSignature());
-        console.error.apply(console, args);
+    log(message?: any, ...optional_params: any[]) {
+        if (!this._enabled) return;
+        console.log(this._dt(), message, ...optional_params);
     }
 
-    debug(message?: any, ...optionalParams: any[]) {
-        if (this._debug) {
-            var args = Array.prototype.slice.call(arguments);
-            args.unshift(this.getLogDateTimeSignature());
-            console.debug.apply(console, args);
-        }
+    warn(message?: any, ...optional_params: any[]) {
+        if (!this._enabled) return;
+        console.warn(this._dt(), message, ...optional_params);
     }
 
+    error(message?: any, ...optional_params: any[]) {
+        if (!this._enabled) return;
+        console.error(this._dt(), message, ...optional_params);
+    }
 
-
-
+    debug(message?: any, ...optional_params: any[]) {
+        if (!this._enabled || !this._debug) return;
+        console.debug(this._dt(), message, ...optional_params);
+    }
 }
 
+/** Singleton */
+export const XLogger = new _XLogger();
+export default XLogger;
+
 /**
- * 
+ * Runtime logger alias.
+ * - Dev: use `console` (real callsites)
+ * - Prod: use `XLogger` (formatted)
+ *
+ * NOTE: This is evaluated once when the module is loaded.
  */
-export const XLogger = new _XLogger()
-export default XLogger
-export {XLogger as _xlog}
+const _is_production =
+    typeof process !== "undefined" &&
+    !!process?.env &&
+    process.env.NODE_ENV === "production";
+
+if (!_is_production) {
+    console.info(
+        "[Xpell] _xlog is redirected to console in development mode. Tip: enable 'Show timestamps' in DevTools → Console for timed logs."
+    );
+}
+
+
+export const _xlog: Pick<
+    Console,
+    "log" | "warn" | "error" | "debug"
+> = _is_production ? (XLogger as any) : console;

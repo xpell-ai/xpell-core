@@ -31,7 +31,7 @@ import XParser from "./XParser"
 import { XLogger as _xlog } from "./XLogger";
 import { XEventListenerOptions, XEventManager as _xem } from "./XEventManager";
 import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
-import _xd, { XDataObject } from "./XData";
+import _xd, { XDataStore } from "./XData";
 
 
 
@@ -82,28 +82,28 @@ export interface XObjectOnEventIndex {
 }
 
 export type XObjectData = {
-  [k: string]: XValue;
+    [k: string]: XValue;
 
-  _id?: string;
-  _type?: string; // keep optional if you rely on defaults in constructors
-  _children?: Array<XObject | XObjectData>;
+    _id?: string;
+    _type?: string; // keep optional if you rely on defaults in constructors
+    _children?: Array<XObject | XObjectData>;
 
-  _name?: string;
-  _data_source?: string;
+    _name?: string;
+    _data_source?: string;
 
-  _on?: XObjectOnEventIndex;
-  _once?: XObjectOnEventIndex;
+    _on?: XObjectOnEventIndex;
+    _once?: XObjectOnEventIndex;
 
-  _on_create?: string | Function;
-  _on_mount?: string | Function;
-  _on_frame?: string | Function;
-  _on_data?: string | Function;
+    _on_create?: string | Function;
+    _on_mount?: string | Function;
+    _on_frame?: string | Function;
+    _on_data?: string | Function;
 
-  _process_frame?: boolean;
-  _process_data?: boolean;
+    _process_frame?: boolean;
+    _process_data?: boolean;
 
-  _nano_commands?: XNanoCommandPack;
-  _debug?: boolean;
+    _nano_commands?: XNanoCommandPack;
+    _debug?: boolean;
 };
 
 
@@ -150,6 +150,9 @@ export class XObject {
             "_parent", "_event_listeners_ids", "_event_parsed", "_mounted", "_debug"],
         _instance_xporters: {}
     }
+
+    private _xd_unsub?: () => void;
+    private _xd_bound_key?: string;
 
 
     /**
@@ -422,13 +425,22 @@ export class XObject {
         }
     }
 
+    
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
-        if (typeof func == "function") {
-            await func(this, ...params)
-        } else if (typeof func == "string") {
-            await this.run(this._id + " " + func) //
+        if (typeof func === "function") {
+            await func(this, ...params);
+        } else if (typeof func === "string") {
+            // If we have params, pass them as xscript param(s)
+            if (params.length > 0) {
+                const data = params[0];
+                const data_txt = JSON.stringify(data).replace(/'/g, "\\'");
+                await this.run(`${this._id} ${func} data:'${data_txt}'`);
+            } else {
+                await this.run(`${this._id} ${func}`);
+            }
         }
     }
+
 
     /**
      * Triggers when the object is being mounted to other element
@@ -440,36 +452,44 @@ export class XObject {
      * }
      */
     async onMount() {
+        if (this._mounted) return;
 
-        if (this._mounted) return
-        //parse events after dom creation
-        this.parseEvents(this._xem_options)
+        // parse events after creation
+        this.parseEvents(this._xem_options);
 
-
-
-        //run on mount event
-        if (this._on_mount) {
-            await this.checkAndRunInternalFunction(this._on_mount)
-        } else if (this._on && this._on["mount"]) {
-            await this.checkAndRunInternalFunction(this._on["mount"])
-        } else if (this._once && this._once["mount"]) {
-            await this.checkAndRunInternalFunction(this._once["mount"])
+        // ✅ bind once when object becomes active
+        if (this._process_data && typeof this._data_source === "string" && this._data_source.length > 0) {
+            this.bindDataSource(this._data_source, { initial: true });
         }
-        this._mounted = true
-        //propagate event to children
-        this._children.forEach((child) => {
-            if (child.onMount && typeof child.onMount === 'function') {
-                child.onMount()
-            }
-        })
+
+
+        // run on mount handlers
+        if (this._on_mount) {
+            await this.checkAndRunInternalFunction(this._on_mount);
+        } else if (this._on && this._on["mount"]) {
+            await this.checkAndRunInternalFunction(this._on["mount"]);
+        } else if (this._once && this._once["mount"]) {
+            await this.checkAndRunInternalFunction(this._once["mount"]);
+        }
+
+        this._mounted = true;
+
+        for (const child of this._children) {
+            if (child.onMount && typeof child.onMount === "function") child.onMount();
+        }
     }
+
 
 
     emptyDataSource() {
-        if (this._data_source && typeof this._data_source === "string") {
-            _xd.delete(this._data_source)
-        }
+        const key = this._data_source;
+        if (typeof key !== "string" || key.length === 0) return;
+
+        const type = (this as any)._type ?? this.constructor.name;
+        const id = (this as any)._id ?? "no-id";
+        _xd.delete(key, { source: `${type}#${id}.emptyDataSource` });
     }
+
 
 
     /**
@@ -510,38 +530,25 @@ export class XObject {
      * 
      */
     async onFrame(frameNumber: number) {
-        //
-        // if (this._on_frame && this._process_frame) {
-        //     if (typeof this._on_frame == "function") {
-        //         await this._on_frame(this, frameNumber)
-        //     } else if (typeof this._on_frame == "string") {
-        //         await this.run(this._id + " " + this._on_frame) //
-        //     }
-        // }
-
         if (this._process_frame) {
             if (this._on_frame) {
-                this.checkAndRunInternalFunction(this._on_frame, frameNumber)
+                this.checkAndRunInternalFunction(this._on_frame, frameNumber);
             } else if (this._on && this._on["frame"]) {
-                this.checkAndRunInternalFunction(this._on["frame"], frameNumber)
+                this.checkAndRunInternalFunction(this._on["frame"], frameNumber);
             } else if (this._once && this._once["frame"]) {
-                this.checkAndRunInternalFunction(this._once["frame"], frameNumber)
+                this.checkAndRunInternalFunction(this._once["frame"], frameNumber);
             }
         }
 
-        if (this._data_source && this._process_data) {
-            if (_xd.has(this._data_source)) {
-                await this.onData(_xd._o[this._data_source])
+        // NOTE: XData2: data delivery is subscription-based (bind), not per-frame polling.
+
+        for (const child of this._children) {
+            if (child.onFrame && typeof child.onFrame === "function") {
+                child.onFrame(frameNumber);
             }
         }
-
-        //propagate event to children
-        this._children.forEach((child) => {
-            if (child.onFrame && typeof child.onFrame === 'function') {
-                child.onFrame(frameNumber)
-            }
-        })
     }
+
 
 
 
@@ -657,10 +664,53 @@ export class XObject {
     }
 
 
+
+    bindDataSource(key?: string, opts?: { initial?: boolean }) {
+        const initial = opts?.initial ?? true;
+
+        const k = (key ?? this._data_source);
+        if (typeof k !== "string" || k.length === 0) return;
+        if (!this._process_data) return;
+
+        // If already bound to same key, do nothing
+        if (this._xd_bound_key === k && this._xd_unsub) return;
+
+        // Unbind previous key
+        this.unbindDataSource();
+
+        // Persist the source key
+        this._data_source = k;
+        this._xd_bound_key = k;
+
+        const type = (this as any)._type ?? this.constructor.name;
+        const id = (this as any)._id ?? "no-id";
+        const src = `${type}#${id}.bindDataSource`;
+
+        // Subscribe (XData2)
+        this._xd_unsub = _xd.on(k, async (ch) => {
+            await this.onData(ch.value);
+        });
+
+        // Optional initial push (mimics old "if already set, deliver once")
+        if (initial && _xd.has(k)) {
+            this.onData(_xd.get(k));
+        }
+    }
+
+    unbindDataSource() {
+        this._xd_unsub?.();
+        this._xd_unsub = undefined;
+        this._xd_bound_key = undefined;
+    }
+
+
+
     /**
      * Dispose the XObject and all its children
      */
     async dispose() {
+        this.unbindDataSource();
+
         if (this._parent) {
             //remove the instance from the parent children array
             const index = this._parent._children.indexOf(this)

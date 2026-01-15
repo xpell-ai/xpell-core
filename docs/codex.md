@@ -1,4 +1,4 @@
-# XPELL-CORE CODEX
+# XPELL-CORE codex.md rules for ai agent for vibe coding with xpell-core
 
 ## Purpose
 This document defines the strict contract for **xpell-core** — the runtime engine and interpreter that powers all Xpell systems.
@@ -29,15 +29,43 @@ xpell-core does **NOT** provide UI rendering.
 UI behavior is added only by higher-level layers (e.g. `XUIObject`).
 
 ---
+## XData Contract (XData2)
 
-## XData Contract
+- XData is shared runtime memory (process-wide), used for explicit state sharing and signaling.
+- XData is NOT persistence.
+- Keys must be explicit, stable, and documented at their point of use.
+- No module may mirror XData into hidden local mutable state as a “shadow source of truth”.
 
-- XData is shared runtime memory.
-- Access ONLY via:
-  - `XData._o[...]` or `_xd._o[...]`
-- XData is not persistence.
-- Keys must be explicit and documented.
-- No deprecated or mirrored APIs are allowed.
+### Canonical API (required)
+All new code MUST use the XData2 API:
+
+- Read: `XData.get(key)` / `_xd.get(key)`
+- Write: `XData.set(key, value, { source })` / `_xd.set(...)`
+- Delete: `XData.delete(key, { source })` / `_xd.delete(...)`
+- Subscribe: `XData.on(key, cb)` / `_xd.on(...)`
+- Notify without changing value (optional): `XData.touch(key, { source })`
+- Mailbox semantics (optional): `XData.pick(key, { source })`
+
+### Compatibility API (legacy)
+- Direct object access via `_o` is LEGACY compatibility only:
+  - `XData._o[key] = value`
+  - `_xd._o[key] = value`
+- `_o` access MAY exist only to support old code and migration.
+- New code MUST NOT write via `_o`.
+- Core may optionally:
+  - warn in dev on legacy writes (`_warn_legacy_writes`)
+  - route legacy writes through `.set()` (`_compat_writes`)
+- Whether `_o` triggers notifications is a configuration detail of XData2, not a contract.
+
+### Required metadata
+- Every `.set()` and `.delete()` in core/runtime code MUST include a `source` string.
+  - Example: `{ source: "xvm:navigate" }`
+- `source` must be stable and human-readable for debugging.
+
+### Rules
+- Do not assume ordering of listeners.
+- Avoid high-frequency writes unless necessary (frame loop keys should be intentional).
+- Do not use XData as an event bus; use XEventManager (`_xem`) for events.
 
 ---
 
