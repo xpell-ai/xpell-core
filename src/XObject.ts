@@ -51,6 +51,8 @@ export type XValue =
     | null
     | undefined
     | Function
+    | object
+    | any[]
     | XValue[]
     | { [k: string]: XValue };
 
@@ -81,6 +83,8 @@ export interface XObjectOnEventIndex {
     [eventName: string]: XObjectOnEventHandler
 }
 
+type XObjectHandler = Function | string | XCommandData | XObjectHandler[];
+
 export type XObjectData = {
     [k: string]: XValue;
 
@@ -94,10 +98,10 @@ export type XObjectData = {
     _on?: XObjectOnEventIndex;
     _once?: XObjectOnEventIndex;
 
-    _on_create?: string | Function;
-    _on_mount?: string | Function;
-    _on_frame?: string | Function;
-    _on_data?: string | Function;
+    _on_create?: XObjectHandler;
+    _on_mount?: XObjectHandler;
+    _on_frame?: XObjectHandler;
+    _on_data?: XObjectHandler;
 
     _process_frame?: boolean;
     _process_data?: boolean;
@@ -122,11 +126,11 @@ export class XObject {
     _debug?: boolean //debug mode for the XObject
     _on: XObjectOnEventIndex = {}
     _once: XObjectOnEventIndex = {}
-    _on_create?: string | Function | undefined
-    _on_mount?: string | Function | undefined
-    _on_frame?: string | Function | undefined
-    _on_data?: string | Function | undefined
-    _on_event?: string | Function | undefined
+    _on_create?: XObjectHandler | undefined
+    _on_mount?: XObjectHandler | undefined
+    _on_frame?: XObjectHandler | undefined
+    _on_data?: XObjectHandler | undefined
+    _on_event?: XObjectHandler | undefined
 
 
     //real-time controllers
@@ -426,10 +430,25 @@ export class XObject {
     }
 
     
+    private async runCmd(cmd: XCommand | XCommandData): Promise<void> {
+        const xcmd = (cmd instanceof XCommand) ? cmd : new XCommand(cmd);
+        await this.execute(xcmd);
+    }
+
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
+        if (Array.isArray(func)) {
+            for (const item of func) {
+                await this.checkAndRunInternalFunction(item, ...params);
+            }
+            return;
+        }
+
         if (typeof func === "function") {
             await func(this, ...params);
-        } else if (typeof func === "string") {
+            return;
+        }
+
+        if (typeof func === "string") {
             // If we have params, pass them as xscript param(s)
             if (params.length > 0) {
                 const data = params[0];
@@ -438,6 +457,39 @@ export class XObject {
             } else {
                 await this.run(`${this._id} ${func}`);
             }
+            return;
+        }
+
+        if (func && typeof func === "object" && (func as any)._op) {
+            const fcmd = func as any;
+            const target = (fcmd._object === undefined || fcmd._object === null || fcmd._object === "this")
+                ? this._id
+                : fcmd._object;
+
+            if (target !== this._id) {
+                _xlog.error(
+                    "XObject JSON handler target not supported in core-only patch; expected _object omitted/'this'/" + this._id
+                );
+                return;
+            }
+
+            const localCmd: { _op: string; _params?: any } = {
+                _op: fcmd._op,
+                _params: fcmd._params ? { ...fcmd._params } : undefined
+            };
+
+            if (params.length > 0) {
+                if (!localCmd._params) localCmd._params = {};
+                if (!Object.prototype.hasOwnProperty.call(localCmd._params, "data")) {
+                    localCmd._params.data = params[0];
+                }
+            }
+
+            if (this._debug) {
+                _xlog.log(this._type + "->" + this._id + "]", "JSON handler executed locally", localCmd);
+            }
+            await this.execute(localCmd as any);
+            return;
         }
     }
 
