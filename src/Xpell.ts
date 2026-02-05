@@ -251,7 +251,7 @@ export default Xpell
 
 export { Xpell as _x }
 export { XUtils, XUtils as _xu, _XUtils ,type XFrameScheduler} from "./XUtils"
-export { XData, XData as _xd, type XDataStore, _XData } from "./XData"
+export { XData, _xd, type XDataStore, _XData } from "./XData"
 export { XParser } from "./XParser"
 export { XCommand, type XCommandData } from "./XCommand"
 export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"

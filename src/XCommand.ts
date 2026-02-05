@@ -45,7 +45,7 @@ export type XCommandData = {
     _object?:string  ,
     _op:string ,
     _params?: {
-        [k:string] : string | number | Function
+        [k:string] : string | number | boolean | null | object | any[]
     },
 }
 
@@ -73,7 +73,7 @@ export  class XCommand {
      * command parameters array
      */
     _params?: {
-        [k:string] : string | number | Function
+        [k:string] : string | number | boolean | null | object | any[]
     }
 
 

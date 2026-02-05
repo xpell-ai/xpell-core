@@ -173,4 +173,5 @@ export class _XData {
 
 /** Singleton */
 export const XData = new _XData();
+export const _xd = XData;
 export default XData;
