@@ -223,3 +223,235 @@ This upgrade is explicitly designed to avoid “code in DB”:
 
 - **v1:** strings + dev-only functions
 - **v2:** JSON commands + sequences for DB-stored realtime views
+
+
+-- Commands:
+```md
+# Codex Prompt — Xpell Nano Commands (Authoritative List)
+
+Use **nano commands only** for runtime behavior.
+Do NOT emit JavaScript functions for DB-stored views.
+All actions must map to whitelisted nano commands.
+
+---
+
+## @xpell/core — XObject (available on ALL objects)
+
+### info
+Logs the object id.
+```
+
+info
+
+```
+
+### log
+Logs a value or the object itself.
+```
+
+log 'hello'
+log
+
+```
+
+### fire
+Fires a global event via XEventManager.
+```
+
+fire event:'my-event' data:'payload'
+
+```
+
+### set-attr
+Sets a safe attribute on the object instance.
+```
+
+set-attr name:'_name' value:'test'
+
+```
+
+### delete-attr
+Deletes a safe attribute from the object instance.
+```
+
+delete-attr name:'_name'
+
+```
+
+---
+
+## @xpell/ui — XUIObject (UI-only)
+
+### hide
+Hides the UI object.
+```
+
+hide
+
+```
+
+### show
+Shows the UI object.
+```
+
+show
+
+```
+
+### toggle
+Toggles visibility.
+```
+
+toggle
+
+```
+
+### set-text
+Sets text content.
+```
+
+set-text text:'Hello'
+
+```
+
+### set (legacy alias)
+Sets text if `text` param exists.
+```
+
+set text:'Hello'
+
+```
+
+### set-text-from-data
+Sets text from incoming data payload.
+```
+
+set-text-from-data pattern:'Value: $data'
+
+```
+
+### set-text-from-frame
+Sets text from frame counter.
+```
+
+set-text-from-frame pattern:'Frame $data'
+
+```
+
+### add-class
+Adds a CSS class.
+```
+
+add-class class:'active'
+
+```
+
+### remove-class
+Removes a CSS class.
+```
+
+remove-class class:'active'
+
+```
+
+### toggle-class
+Toggles a CSS class.
+```
+
+toggle-class class:'active'
+
+```
+
+### set-style
+Sets an inline style.
+```
+
+set-style name:'color' value:'red'
+
+```
+
+### set-attr
+Sets a DOM attribute.
+```
+
+set-attr name:'aria-label' value:'Close'
+
+```
+
+### remove-attr
+Removes a DOM attribute.
+```
+
+remove-attr name:'aria-label'
+
+```
+
+---
+
+## @xpell/3d — X3DObject (3D-only)
+
+### rotation
+Sets or increments rotation axes.
+```
+
+rotation x:0.1 y:++0.02 z:--0.01
+
+```
+
+### spin
+Applies continuous rotation via on-frame hook.
+```
+
+spin y:0.01
+
+```
+
+### stop
+Stops on-frame behavior.
+```
+
+stop
+
+```
+
+### follow-joystick
+Moves object using joystick data from XData.
+```
+
+follow-joystick
+
+```
+
+### orbit
+Moves object in an orbit.
+```
+
+orbit radius:2 speed:0.02
+
+````
+
+---
+
+## Sequences (native, no extra command)
+
+Multiple nano commands can be executed in order using arrays:
+
+```json
+[
+  { "_op": "hide" },
+  { "_op": "set-text", "_params": { "text": "Hidden" } },
+  { "_op": "show" }
+]
+```
+
+---
+
+## Rules (MANDATORY)
+
+* Prefer **JSON commands** for DB-stored views
+* Use **strings only for trivial actions**
+* Use **arrays instead of `;` or scripting**
+* Never emit `eval`, `new Function`, or inline JS
+* If output is stored → it MUST be data-only
+
+This list is the **single source of truth** for Codex and agents.
