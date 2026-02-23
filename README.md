@@ -1,96 +1,135 @@
-# Xpell Core
+# @xpell/core
 
-**Xpell Core** is the foundational runtime of the Xpell framework.  
-It provides the core engine, real-time update loop, event system, data layer, and utilities used by XUI (UI engine), X3D (3D engine), and higher-level Xpell modules.
+Xpell 2 Alpha --- AI-Native Runtime Engine
 
-Xpell Core is designed for **high-performance, real-time JavaScript/TypeScript applications**, including:
+`@xpell/core` is the foundational execution layer of the Xpell 2
+platform.
 
-- real-time UI  
-- AI-driven interfaces  
-- dashboards  
-- data-driven visualizations  
-- WebGL/3D experiences  
-- vibe-coded apps (LLM-assisted development)
+It defines the runtime contracts that power the entire ecosystem,
+including:
 
-If you are building with Xpell, this package provides the low-level primitives the rest of the framework depends on.
+-   `@xpell/ui` (real-time UI layer)
+-   `@xpell/3d` (spatial runtime)
+-   `@xpell/node` (server runtime)
 
-## Features
+Xpell Core is designed for real-time, AI-collaborative systems --- where
+applications can evolve at runtime instead of relying solely on rebuild
+cycles.
 
-- Real-time engine update loop  
-- Event and signal system  
-- Core data structures  
-- Object lifecycle management  
-- Shared utilities for UI, 3D, and AI modules  
-- Zero-dependency, lightweight foundation  
-- Written in TypeScript  
+> This package is part of the Xpell 2 Alpha platform.\
+> See the full release overview at https://xpell.ai
 
-## Installation
+------------------------------------------------------------------------
 
-    npm install xpell-core
-    pnpm add xpell-core
-    yarn add xpell-core
+## What @xpell/core Provides
 
-## Usage
+### XData 2
 
-xpell-core provides low-level building blocks for the Xpell framework. Below is a simple example showing how to use Xpell Core's event system and update loop.
+Structured shared runtime state for predictable mutation and
+coordination.
 
-## When to use Xpell Core
+### Nano-Commands 2
 
-Use xpell-core directly if you are:
+Command handlers defined as text or structured JSON, enabling safe
+serialization and AI-driven runtime edits.
 
-- Building low-level extensions for Xpell  
-- Creating custom UI components  
-- Developing new rendering pipelines  
-- Writing real-time, loop-driven modules  
-- Integrating AI-powered reactive systems  
-- Working inside internal Xpell packages  
+### XEM (Xpell Event Manager)
 
-Most end-users should install:
+A lightweight process-wide event bus for decoupled runtime coordination.
 
-    npm install xpell
+### XModule
 
-which includes xpell-core automatically.
+The only valid extension point for behavior in the Xpell runtime.
 
-## Who Should Use xpell-core Directly?
+### XObject
 
-Most developers should **not** depend on xpell-core directly.
+The base runtime object model (UI behavior lives only in `@xpell/ui`).
 
-Use xpell-core only if you are:
-- Developing Xpell framework modules
-- Building custom runtime systems
-- Extending XModule or XObject internals
-- Working on Xpell UI / 3D / server internals
+### Execution Loop
 
-For application development, use:
-- xpell-ui
-- xpell
+Deterministic real-time update cycle for dynamic systems.
 
+------------------------------------------------------------------------
 
-## Relationship to the Xpell Framework
+## Design Principles
 
-Xpell Core powers all other Xpell packages:
+-   Runtime-first architecture
+-   Explicit contracts over hidden state
+-   Modular extension via XModule
+-   No UI assumptions inside core
+-   Zero external dependencies
+-   TypeScript-native
 
-- xpell-ui  
-- xpell-3d  
-- xpell  
-- future Xpell II modules  
+------------------------------------------------------------------------
 
-## Documentation
+## Installation (Alpha)
 
-For a detailed overview of the Xpell architecture, see  
-[`docs/architecture/overview.md`](docs/architecture/overview.md).
+npm install @xpell/core@alpha
 
-## Links
+You will typically combine it with:
 
-https://xpell.ai
+npm install @xpell/ui@alpha\
+npm install @xpell/node@alpha\
+npm install @xpell/3d@alpha
 
-GitHub:  
-https://github.com/xpell-ai/xpell-core
+Alpha builds are intentionally not published under the `latest` tag.
+
+------------------------------------------------------------------------
+
+## When to Use @xpell/core Directly
+
+Most application developers should work with higher-level packages.
+
+Use `@xpell/core` directly if you are:
+
+-   Building runtime extensions
+-   Creating custom XModule implementations
+-   Extending engine-level primitives
+-   Working on Xpell internals
+-   Developing advanced AI-driven runtime systems
+
+------------------------------------------------------------------------
+
+## Architecture Role in Xpell 2
+
+Xpell 2 is modular:
+
+-   `@xpell/core` → Runtime contracts + execution engine\
+-   `@xpell/ui` → Real-time UI framework\
+-   `@xpell/3d` → Three.js-based spatial runtime\
+-   `@xpell/node` → Server runtime (xnode, Wormholes, XDB)
+
+Core defines the execution model.\
+Other packages implement specialized layers on top of it.
+
+------------------------------------------------------------------------
+
+## Alpha Status
+
+This package is currently in Alpha.
+
+-   APIs may evolve
+-   Contracts may be refined
+-   Performance optimizations are ongoing
+
+This release is intended for architectural experimentation and early
+adopters.
+
+------------------------------------------------------------------------
+
+## Documentation & Links
+
+Website: https://xpell.ai\
+GitHub: https://github.com/xpell-ai/xpell-core
+
+------------------------------------------------------------------------
 
 ## Versioning
 
-xpell-core follows **semantic versioning**, aligned with the main Xpell release stream.
+Follows semantic versioning under the Xpell 2 release stream.
+
+------------------------------------------------------------------------
 
 ## License
 
-MIT License — © Aime Technologies, 2022–Present
+MIT License --- © Aime Technologies
