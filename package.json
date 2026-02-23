@@ -31,7 +31,7 @@
     "docs:api": "typedoc",
     "docs": "pnpm run docs:api",
     "test": "echo \"No tests yet\" && exit 0",
-    "publish-alpha-next": "pnpm version prerelease --preid=alpha --no-git-tag-version && pnpm publish --tag alpha"
+    "publish-alpha-next": "pnpm version prerelease --preid=alpha && pnpm publish --tag alpha"
   },
   "keywords": [
     "xpell",
