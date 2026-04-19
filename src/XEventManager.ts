@@ -166,7 +166,19 @@ export class _XEventManager {
 /**
  * Global Xpell event manager instance.
  */
-export const XEventManager = new _XEventManager();
-export const _xem = XEventManager;
+// export const XEventManager = new _XEventManager();
+// export const _xem = XEventManager;
+let _xem_ref: any;
 
-export default XEventManager;
+export function setXEventManager(xem: any) {
+  _xem_ref = xem;
+}
+
+export function getXEventManager() {
+  if (!_xem_ref) {
+    throw new Error("XEventManager not set");
+  }
+  return _xem_ref;
+}
+
+export default _XEventManager;

@@ -41,7 +41,7 @@ import { XLogger as _xlog } from "./XLogger"
 import XData from "./XData"
 import XParser from "./XParser"
 import XModule from "./XModule"
-import { XEventManager as XEM } from "./XEventManager"
+import { getXEventManager } from "./XEventManager"
 import { XResponseError } from "./XProtocol"
 
 
@@ -77,7 +77,7 @@ export class XpellEngine {
         this._fps_calc = new FPSCalc()
         this.parser = XParser
         this._modules = {}
-        XEM.fire("xpell-init")
+        // getXEventManager().fire("xpell-init")
         _xlog._enabled = false
         //this.load()
     }
@@ -274,8 +274,8 @@ export {
 } from "./XObject"
 export { XObjectManager } from "./XObjectManager"
 export {
-    XEventManager,
-    XEventManager as _xem,
+    setXEventManager,
+    getXEventManager,
     _XEventManager,
     type XEventListener,
     type XEventListenerOptions,

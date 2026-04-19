@@ -29,7 +29,7 @@ import { XUtils } from "./XUtils"
 import XCommand, { XCommandData } from "./XCommand";
 import XParser from "./XParser"
 import { XLogger as _xlog } from "./XLogger";
-import { XEventListenerOptions, XEventManager as _xem } from "./XEventManager";
+import { XEventListenerOptions,getXEventManager } from "./XEventManager";
 import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
 import _xd, { XDataStore } from "./XData";
 
@@ -78,7 +78,11 @@ export type XDataXporter = {
     }
 }
 
-export type XObjectOnEventHandler = (xObject: XObject, data?: any) => void
+export type XObjectOnEventHandler =
+    | ((xObject: XObject, data?: any) => void)
+    | string
+    | XCommandData
+    | XObjectOnEventHandler[];
 export interface XObjectOnEventIndex {
     [eventName: string]: XObjectOnEventHandler
 }
@@ -248,30 +252,21 @@ export class XObject {
     }
 
 
-    addEventListener(eventName: string, handler: XObjectOnEventHandler | string, options?: XEventListenerOptions) {
+    addEventListener(eventName: string, handler: XObjectOnEventHandler | string | any, options?: XEventListenerOptions) {
         if (!options) {
-            options = this._xem_options
+            options = this._xem_options;
         }
-        let _final_handler: any;
-        if (typeof handler === "function") {
-            _final_handler = async (eventData?: any) => {
-                handler(this, eventData)
-            }
-        }
-        else if (typeof handler === "string") {
-            _final_handler = async (eventData?: any) => {
-                const _final_xscript = this._id + " " + handler + " event-data='" + JSON.stringify(eventData).replace(/'/g, "\\'") + "'"
-                await this.run(_final_xscript) //run the nano command
-            }
-        }
-        else {
-            throw new Error("event handler must be a function")
-        }
-        const event_listener_id = _xem.on(eventName, _final_handler, options, this)
+
+        const _final_handler = async (eventData?: any) => {
+            await this.checkAndRunInternalFunction(handler, eventData);
+        };
+
+        const event_listener_id = getXEventManager().on(eventName, _final_handler, options, this);
+
         if (!this._event_listeners_ids[eventName]) {
-            this._event_listeners_ids[eventName] = []
+            this._event_listeners_ids[eventName] = [];
         }
-        this._event_listeners_ids[eventName].push(event_listener_id)
+        this._event_listeners_ids[eventName].push(event_listener_id);
     }
 
 
@@ -279,7 +274,7 @@ export class XObject {
         const listenerIds = this._event_listeners_ids[eventName]
         if (listenerIds && listenerIds.length) {
             listenerIds.forEach((listenerId) => {
-                _xem.remove(listenerId)
+                getXEventManager().remove(listenerId)
             })
             delete this._event_listeners_ids[eventName]
         }
@@ -429,13 +424,14 @@ export class XObject {
         }
     }
 
-    
+
     private async runCmd(cmd: XCommand | XCommandData): Promise<void> {
         const xcmd = (cmd instanceof XCommand) ? cmd : new XCommand(cmd);
         await this.execute(xcmd);
     }
 
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
+        // 1. ARRAY → sequential execution
         if (Array.isArray(func)) {
             for (const item of func) {
                 await this.checkAndRunInternalFunction(item, ...params);
@@ -443,54 +439,88 @@ export class XObject {
             return;
         }
 
+        // 2. FUNCTION → direct call
         if (typeof func === "function") {
             await func(this, ...params);
             return;
         }
 
+        // 3. STRING → parse → execute (NO string serialization)
         if (typeof func === "string") {
-            // If we have params, pass them as xscript param(s)
+            const parsed = XParser.parseObjectCommand(`${this._id} ${func}`);
+
             if (params.length > 0) {
-                const data = params[0];
-                const data_txt = JSON.stringify(data).replace(/'/g, "\\'");
-                await this.run(`${this._id} ${func} data:'${data_txt}'`);
-            } else {
-                await this.run(`${this._id} ${func}`);
+                parsed._params = parsed._params || {};
+
+                const payload = params[0];
+
+                parsed._params._event = payload;
+                
+                // backward compatibility
+                // ONLY set data if it's not already set AND payload is not a DOM event
+                if (!parsed._params.data && !payload?.target) {
+                    parsed._params.data = payload;
+                }
             }
+
+            await this.execute(parsed);
             return;
         }
 
+        // 4. JSON command object → execute directly
         if (func && typeof func === "object" && (func as any)._op) {
             const fcmd = func as any;
-            const target = (fcmd._object === undefined || fcmd._object === null || fcmd._object === "this")
-                ? this._id
-                : fcmd._object;
+
+            const target =
+                fcmd._object === undefined ||
+                    fcmd._object === null ||
+                    fcmd._object === "this"
+                    ? this._id
+                    : fcmd._object;
 
             if (target !== this._id) {
                 _xlog.error(
-                    "XObject JSON handler target not supported in core-only patch; expected _object omitted/'this'/" + this._id
+                    "XObject JSON handler target not supported; expected _object omitted/'this'/" + this._id
                 );
                 return;
             }
 
             const localCmd: { _op: string; _params?: any } = {
                 _op: fcmd._op,
-                _params: fcmd._params ? { ...fcmd._params } : undefined
+                _params: fcmd._params ? { ...fcmd._params } : {},
             };
 
             if (params.length > 0) {
-                if (!localCmd._params) localCmd._params = {};
+                const payload = params[0];
+
+                // backward compatibility
                 if (!Object.prototype.hasOwnProperty.call(localCmd._params, "data")) {
-                    localCmd._params.data = params[0];
+                    localCmd._params.data = payload;
+                }
+
+                // ✅ NEW: pass raw event / payload
+                if (!Object.prototype.hasOwnProperty.call(localCmd._params, "_event")) {
+                    localCmd._params._event = payload;
                 }
             }
 
             if (this._debug) {
-                _xlog.log(this._type + "->" + this._id + "]", "JSON handler executed locally", localCmd);
+                _xlog.log(
+                    this._type + "->" + this._id + "]",
+                    "JSON handler executed locally",
+                    localCmd
+                );
             }
+
             await this.execute(localCmd as any);
             return;
         }
+
+        // 5. INVALID
+        _xlog.error(
+            this._type + "->" + this._id + "] invalid handler in checkAndRunInternalFunction",
+            func
+        );
     }
 
 
