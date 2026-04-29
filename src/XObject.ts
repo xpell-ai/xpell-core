@@ -29,10 +29,10 @@ import { XUtils } from "./XUtils"
 import XCommand, { XCommandData } from "./XCommand";
 import XParser from "./XParser"
 import { XLogger as _xlog } from "./XLogger";
-import { XEventListenerOptions,getXEventManager } from "./XEventManager";
+import { XEventListenerOptions, getXEventManager } from "./XEventManager";
 import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
 import _xd, { XDataStore } from "./XData";
-
+import { getXRuntime } from "./XRuntime";
 
 
 export type wordsList = {
@@ -455,7 +455,7 @@ export class XObject {
                 const payload = params[0];
 
                 parsed._params._event = payload;
-                
+
                 // backward compatibility
                 // ONLY set data if it's not already set AND payload is not a DOM event
                 if (!parsed._params.data && !payload?.target) {
@@ -667,17 +667,54 @@ export class XObject {
      * 
      */
     async execute(xCommand: XCommand | XCommandData) {
-        // run nano commands
 
-        if (xCommand._op && this._nano_commands[xCommand._op]) {
-            try {
-                await this._nano_commands[xCommand._op](<XCommand>xCommand, this)
-            } catch (err) {
-                _xlog.error(this._id + " has error with command name " + xCommand._op + " " + err)
-            }
-        } else {
-            _xlog.error(this._id + " has no command name " + xCommand._op)
+        const op = xCommand?._op;
+
+        if (!op) {
+            _xlog.error(this._id + " missing _op in command");
+            return;
         }
+
+        // --------------------------------------------------
+        // 1. LOCAL NANO COMMAND (PRIORITY - backward compat)
+        // --------------------------------------------------
+        if (this._nano_commands[op]) {
+            try {
+                return await this._nano_commands[op](<XCommand>xCommand, this);
+            } catch (err) {
+                _xlog.error(this._id + " has error with command name " + op + " " + err);
+                return;
+            }
+        }
+
+        // --------------------------------------------------
+        // 2. MODULE ROUTING (NEW)
+        // --------------------------------------------------
+        const moduleName = (xCommand as any)?._module;
+
+        if (moduleName) {
+            try {
+                const _x = getXRuntime();
+
+                return await _x.execute({
+                    ...(xCommand as any),
+                    _module: moduleName
+                });
+
+            } catch (err) {
+                _xlog.error(
+                    this._id +
+                    " module execution failed: " +
+                    moduleName + "." + op + " " + err
+                );
+                return;
+            }
+        }
+
+        // --------------------------------------------------
+        // 3. DEFAULT (same behavior as today)
+        // --------------------------------------------------
+        _xlog.error(this._id + " has no command name " + op);
     }
 
     /**

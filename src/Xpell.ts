@@ -38,11 +38,10 @@
 import XCommand, { XCommandData } from "./XCommand"
 import { XUtils, FPSCalc, XFrameScheduler } from "./XUtils"
 import { XLogger as _xlog } from "./XLogger"
-import XData from "./XData"
+import {XData,XDataModule} from "./XData"
 import XParser from "./XParser"
 import XModule from "./XModule"
-import { getXEventManager } from "./XEventManager"
-import { XResponseError } from "./XProtocol"
+import { setXRuntime } from "./XRuntime";
 
 
 
@@ -77,9 +76,10 @@ export class XpellEngine {
         this._fps_calc = new FPSCalc()
         this.parser = XParser
         this._modules = {}
-        // getXEventManager().fire("xpell-init")
+        
         _xlog._enabled = false
-        //this.load()
+        setXRuntime(this);
+        
     }
 
 
@@ -226,6 +226,7 @@ export class XpellEngine {
      * Start Xpell engine for web browsers using requestAnimationFrame
      */
     start() {
+        this.loadModule(new XDataModule())
         _xlog.log("Starting Xpell")
         this.onFrame()
     }
@@ -251,7 +252,7 @@ export default Xpell
 
 export { Xpell as _x }
 export { XUtils, XUtils as _xu, _XUtils ,type XFrameScheduler} from "./XUtils"
-export { XData, _xd, type XDataStore, _XData } from "./XData"
+export { XData, _xd, type XDataStore, _XData,XDataModule } from "./XData"
 export { XParser } from "./XParser"
 export { XCommand, type XCommandData } from "./XCommand"
 export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
