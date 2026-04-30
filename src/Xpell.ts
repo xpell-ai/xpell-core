@@ -42,6 +42,8 @@ import {XData,XDataModule} from "./XData"
 import XParser from "./XParser"
 import XModule from "./XModule"
 import { setXRuntime } from "./XRuntime";
+import { XEventManagerModule } from "./XEventManager.js"
+
 
 
 
@@ -226,7 +228,9 @@ export class XpellEngine {
      * Start Xpell engine for web browsers using requestAnimationFrame
      */
     start() {
-        this.loadModule(new XDataModule())
+        _xlog.log("Loading Xpell core modules...[xd, xem]")
+        this.loadModule(new XDataModule() as any)
+        this.loadModule(new XEventManagerModule())
         _xlog.log("Starting Xpell")
         this.onFrame()
     }
@@ -277,7 +281,8 @@ export { XObjectManager } from "./XObjectManager"
 export {
     setXEventManager,
     getXEventManager,
-    _XEventManager,
+    _XEventManager, 
+    XEventManagerModule,
     type XEventListener,
     type XEventListenerOptions,
 } from "./XEventManager.js";
