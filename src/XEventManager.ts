@@ -16,10 +16,8 @@
  * @file XEventManager.ts
  */
 
-import XCommand from "./XCommand.js";
 import { _xlog } from "./XLogger.js";
-import { XModule } from "./XModule.js";
-import { XUtils as _xu } from "./XUtils.js";
+import {  _xu } from "./XUtils.js";
 
 export type XEventListenerOptions = {
   _once?: boolean;
@@ -186,18 +184,3 @@ export function getXEventManager() {
 export default _XEventManager;
 
 
-export class XEventManagerModule extends XModule {
-  static _name = "xem";
-
-  constructor() {
-    super({ _name: XEventManagerModule._name });
-  }
-
-  async _fire(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const event_name = _xu.ensure_string(params.event, "event");
-    const data = params.data;
-    const xem = getXEventManager();
-    await xem.fire(event_name, data);
-  }
-}

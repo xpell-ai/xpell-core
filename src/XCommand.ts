@@ -39,16 +39,21 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
-
 export type XCommandData = {
-    _module: string  ,
-    _object?:string  ,
-    _op:string ,
+    _module: string,
+    _object?: string,
+    _op: string,
     _params?: {
-        [k:string] : string | number | boolean | null | object | any[]
+        [k: string]:
+            | string
+            | number
+            | boolean
+            | null
+            | undefined
+            | object
+            | any[]
     },
 }
-
 
 
 

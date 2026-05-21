@@ -54,15 +54,18 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
-import XUtils from "./XUtils"
+import { _xu } from "./XUtils"
 import XParser from "./XParser"
 import { XLogger as _xl } from "./XLogger";
 import XObjectManager from "./XObjectManager";
 import * as _XC from "./XConst"
 import { XObjectData, XObject, XObjectPack } from "./XObject";
 import XCommand, { XCommandData } from "./XCommand";
-import { _xd } from "./Xpell";
-
+import { _xd } from "./XData";
+import type {
+    XpellSkill,
+    XpellSkillCommand
+} from "./XSkills";
 
 
 export type XModuleData = {
@@ -70,6 +73,26 @@ export type XModuleData = {
 }
 
 export const XD_MODULE_NUM_OF_OBJECTS = "engine:module:num-of-objects:";
+
+export const XMODULE_SKILL: XpellSkill = {
+    _id: "xmodule",
+    _title: "XModule Runtime Contract",
+    _version: "1.0.0",
+    _active: true,
+    _type: "runtime-api-skill",
+
+    _description:
+        "Base runtime module contract for object ownership, object packs, and executable underscore-prefixed commands.",
+
+    _core_rules: [
+        "Every module must have a unique _name.",
+        "Modules expose commands through methods prefixed with underscore.",
+        "Command names remove the leading underscore and convert dashes to underscores internally.",
+        "Modules own and create registered XObject classes.",
+        "Do not mutate another module's objects directly."
+    ],
+
+};
 
 /**
  * Xpell Base Module
@@ -81,6 +104,8 @@ export class XModule {
     [k: string]: any
     _id: string
     _name: string;
+    _loaded: boolean = false;
+    _loading: boolean = false;
     _log_rules: {
         createObject: boolean,
         removeObject: boolean,
@@ -94,16 +119,123 @@ export class XModule {
     #_object_manger = new XObjectManager()
     //engine: any;  //deprecated remove after spell3d
 
+    static _skill: XpellSkill = XMODULE_SKILL;
+
+    static _ops: Record<string, XpellSkillCommand> = {
+        help: {
+            _name: "help",
+            _scope: "module",
+            _description: "Return module help or command-specific help."
+        },
+        info: {
+            _name: "info",
+            _scope: "module",
+            _description: "Log basic module information."
+        }
+    };
+
+    static getOwnSkillBase(): XpellSkill {
+        return {
+            ...this._skill
+        };
+    }
+
+    getOwnSkill(): XpellSkill {
+        const ctor = this.constructor as typeof XModule & {
+            _skill?: XpellSkill;
+        };
+
+        const base = ctor._skill ?? XMODULE_SKILL;
+
+        return {
+            ...base,
+            _exports: {
+                ...(base._exports ?? {}),
+                _modules: [
+                    {
+                        _name: this._name,
+                        _scope: base._type === "server-module-api" ? "server" : "client",
+                        _description: base._description,
+                        _ops: this.getCommandSkills()
+                    }
+                ]
+            }
+        };
+    }
+
+    getSkillChain(): XpellSkill[] {
+        return [this.getOwnSkill()];
+    }
+
+    getObjectSkills(): XpellSkill[] {
+        const out: XpellSkill[] = [];
+        const seen = new Set<string>();
+
+        for (const cls of Object.values(this.#_object_manger.getObjectClasses())) {
+            if (typeof (cls as any).getOwnSkill !== "function") continue;
+
+            const skill = (cls as any).getOwnSkill() as XpellSkill;
+            if (!skill?._id) continue;
+
+            if (seen.has(skill._id)) continue;
+            seen.add(skill._id);
+
+            out.push(skill);
+        }
+
+        return out;
+    }
+
+    getCommandSkills(): XpellSkillCommand[] {
+        const proto = Object.getPrototypeOf(this);
+
+        const ctor = this.constructor as typeof XModule & {
+            _ops?: Record<string, XpellSkillCommand>;
+        };
+
+        const explicit_ops = ctor._ops ?? {};
+
+        return Object
+            .getOwnPropertyNames(proto)
+            .filter(name =>
+                name.startsWith("_") &&
+                !name.startsWith("__") &&
+                typeof (this as any)[name] === "function"
+            )
+            .map(name => {
+                const op_name = name.slice(1).replaceAll("_", "-");
+
+                return explicit_ops[op_name] ?? {
+                    _name: op_name,
+                    _scope: "module",
+                    _description: `Runtime module command: ${op_name}`
+                };
+            });
+    }
 
     constructor(data: XModuleData) {
         this._name = data._name
-        this._id = XUtils.guid()
+        this._id = _xu.guid()
 
 
     }
 
-    load() {
-        _xl.log("Module " + this._name + " loaded")
+    async load(): Promise<void> {
+        if (this._loaded || this._loading) {
+            return;
+        }
+        this._loading = true;
+        try {
+            await this.onLoad();
+            this._loaded = true;
+            _xl.log("Module " + this._name + " loaded");
+        } finally {
+            this._loading = false;
+        }
+    }
+
+    protected async onLoad(): Promise<void> {
+        // optional override
     }
 
     /**
@@ -113,18 +245,29 @@ export class XModule {
      */
     create(data: XObjectData) {
 
+        if (data._debug) {
+            _xl.log("Creating object with data", data)
+        }
         let xObject: any;
         if (data.hasOwnProperty("_type")) {
-            if (this.#_object_manger.hasObjectClass(<string>data["_type"])) {
-                let xObjectClass = this.#_object_manger.getObjectClass(<string>data["_type"]);
-                if (xObjectClass.hasOwnProperty("defaults")) {
-                    XUtils.mergeDefaultsWithData(data, xObjectClass.defaults);
-                }
-                xObject = new xObjectClass(data);
+            if (data._debug) {
+                _xl.log("Object type is", data._type, this.hasObject(data._type as string) ? "found" : "not found", "in module", this._name)
             }
-            else {
-                throw "Xpell object '" + data["_type"] + "' not found";
+            const type = String(data["_type"]);
+            const xObjectClass = this.#_object_manger.getObjectClass(type);
+            if (!xObjectClass) {
+                throw `Xpell object '${type}' not found in module '${this._name}'`;
             }
+            if (
+                typeof xObjectClass === "function" &&
+                xObjectClass.hasOwnProperty("defaults")
+            ) {
+                _xu.mergeDefaultsWithData(
+                    data,
+                    xObjectClass.defaults
+                );
+            }
+            xObject = new xObjectClass(data);
         }
         else {
             xObject = new XObject(data);
@@ -167,8 +310,6 @@ export class XModule {
         // unregister bottom-up (safer)
         ids.reverse().forEach(id => this.#_object_manger.removeObject(id));
     }
-
-
 
 
     _info(xCommand: XCommand) {
@@ -285,6 +426,10 @@ export class XModule {
         return this.#_object_manger.getObject(objectId)
     }
 
+    hasObject(name: string) {
+        return this.#_object_manger.hasObjectClass(name);
+    }
+
     /**
      * Returns the XObject instance from the module Object Manager
      * Usage:
@@ -343,6 +488,4 @@ export class XModule {
     }
 
 }
-
-// export const GenericModule = new XModule({_name:"xmodule"})
 export default XModule

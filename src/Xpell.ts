@@ -36,14 +36,15 @@
 
 /** interface */
 import XCommand, { XCommandData } from "./XCommand"
-import { XUtils, FPSCalc, XFrameScheduler } from "./XUtils"
+import { _xu, FPSCalc, XFrameScheduler } from "./XUtils"
 import { XLogger as _xlog } from "./XLogger"
-import {XData,XDataModule} from "./XData"
+import { _xd } from "./XData"
+import { XDataModule } from "./XDataModule"
 import XParser from "./XParser"
-import XModule from "./XModule"
+import { XModule, XMODULE_SKILL } from "./XModule"
 import { setXRuntime } from "./XRuntime";
-import { XEventManagerModule } from "./XEventManager.js"
-
+import { XEventManagerModule } from "./XEvenetManagerModule"
+import { XOBJECT_SKILL } from "./XObject"
 
 
 
@@ -71,17 +72,17 @@ export class XpellEngine {
     parser: typeof XParser
 
     constructor(opts?: { _target_fps?: number; _schedule_frame?: XFrameScheduler }) {
-        this._schedule_frame = opts?._schedule_frame ?? XUtils.createDefaultScheduler(opts?._target_fps);
+        this._schedule_frame = opts?._schedule_frame ?? _xu.createDefaultScheduler(opts?._target_fps);
         this._version = "0.0.1"
-        this._engine_id = XUtils.guid()
+        this._engine_id = _xu.guid()
         this._frame_number = 0
         this._fps_calc = new FPSCalc()
         this.parser = XParser
         this._modules = {}
-        
+
         _xlog._enabled = false
         setXRuntime(this);
-        
+
     }
 
 
@@ -123,16 +124,28 @@ export class XpellEngine {
 
 
 
+    /** 
+     *  Module management
+     *  Modules are the main building blocks of Xpell applications, providing specific functionality (UI, data, etc.)
+     *  loadModule() is fire-and-forget.
+     * Use loadModuleAsync() for deterministic startup. 
+    */
+
+    private addModule(xModule: XModule) {
+        if (this._modules.hasOwnProperty(xModule._name)) {
+            _xlog.log("Module " + xModule._name + " already loaded");
+            return false;
+        }
+        this._modules[xModule._name] = xModule;
+        return true;
+    }
 
     /**
      * Loads Xpell module into the engine
      * @param {XModule} xModule 
      */
     loadModule(xModule: XModule): void {
-        if (this._modules.hasOwnProperty(xModule._name)) {
-            _xlog.log("Module " + xModule._name + " already loaded")
-        } else {
-            this._modules[<any>xModule._name] = xModule;
+        if (this.addModule(xModule)) {
             xModule.load()
         }
     }
@@ -144,6 +157,19 @@ export class XpellEngine {
     loadModules(...xModulesArray: Array<XModule>): void {
         xModulesArray.forEach(mod => this.loadModule(mod))
     }
+
+    async loadModuleAsync(xModule: XModule): Promise<void> {
+        if (this.addModule(xModule)) {
+            await xModule.load()
+        }
+    }
+
+    async loadModulesAsync(...xModulesArray: Array<XModule>): Promise<void> {
+        for (const mod of xModulesArray) {
+            await this.loadModuleAsync(mod)
+        }
+    }
+
 
 
 
@@ -200,13 +226,13 @@ export class XpellEngine {
         const fps = this._fps_calc.calc();
 
         // canonical keys (preferred)
-        XData.set(XD_FRAME_NUMBER, this._frame_number, { source: "engine" });
-        XData.set(XD_FPS, fps, { source: "engine" });
+        _xd.set(XD_FRAME_NUMBER, this._frame_number, { source: "engine" });
+        _xd.set(XD_FPS, fps, { source: "engine" });
 
         // legacy keys (deprecated) - keep temporarily
-        if (XData._compat_legacy_keys) {
-            XData.set("frame-number", this._frame_number, { source: "engine:legacy" });
-            XData.set("fps", fps, { source: "engine:legacy" });
+        if (_xd._compat_legacy_keys) {
+            _xd.set("frame-number", this._frame_number, { source: "engine:legacy" });
+            _xd.set("fps", fps, { source: "engine:legacy" });
         }
 
         this._schedule_frame(() => this.onFrame());
@@ -235,12 +261,43 @@ export class XpellEngine {
         this.onFrame()
     }
 
-    /**
-     * deprecated - use XData._o directly
-     */
-    getParam(name: string, defaultValue?: string,): any {
-        return (name in XData._o) ? XData._o[name] : defaultValue;
+    getCoreSkills() {
+        return [
+            XMODULE_SKILL,
+            XOBJECT_SKILL
+        ];
+    }
 
+    getModuleSkills() {
+        return Object.values(this._modules)
+            .flatMap((mod: any) =>
+                typeof mod.getSkillChain === "function"
+                    ? mod.getSkillChain()
+                    : []
+            );
+    }
+
+    getSkills() {
+        return {
+            _runtime: {
+                _engine_id: this._engine_id,
+                _version: this._version
+            },
+
+            _skills: this.getCoreSkills(),
+
+            _modules: Object.values(this._modules).map((mod: any) => ({
+                _name: mod._name,
+                _skills:
+                    typeof mod.getSkillChain === "function"
+                        ? mod.getSkillChain()
+                        : [],
+                _objects:
+                    typeof mod.getObjectSkills === "function"
+                        ? mod.getObjectSkills()
+                        : []
+            }))
+        };
     }
 
 }
@@ -255,8 +312,9 @@ export default Xpell
 
 
 export { Xpell as _x }
-export { XUtils, XUtils as _xu, _XUtils ,type XFrameScheduler} from "./XUtils"
-export { XData, _xd, type XDataStore, _XData,XDataModule } from "./XData"
+export { _XUtils, XUtils, _xu, type XFrameScheduler } from "./XUtils"
+export { XData, _xd, type XDataStore, _XData } from "./XData"
+export { XDataModule } from "./XDataModule"
 export { XParser } from "./XParser"
 export { XCommand, type XCommandData } from "./XCommand"
 export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
@@ -281,12 +339,19 @@ export { XObjectManager } from "./XObjectManager"
 export {
     setXEventManager,
     getXEventManager,
-    _XEventManager, 
-    XEventManagerModule,
+    _XEventManager,
     type XEventListener,
     type XEventListenerOptions,
 } from "./XEventManager.js";
+export { XEventManagerModule } from "./XEvenetManagerModule"
 export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands"
+export { createNanoCommandWithSkill } from "./XNanoCommands"
 export { XParams } from "./XParams"
 export { XError, type XErrorOptions, type XErrorLevel, type XErrorMeta } from "./XError"
 export { type XResponseData, XResponse, XResponseOK, XResponseError } from "./XProtocol"
+export type {
+    XpellSkill,
+    XpellSkillType,
+    XpellSkillCommand,
+    XpellSkillModule
+} from "./XSkills";

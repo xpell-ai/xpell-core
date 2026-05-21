@@ -1,5 +1,6 @@
 
-import { XModule, type XCommand,_xu } from "@xpell/core";
+import _xu from "./XUtils";
+
 
 export type XDataStore = Record<string, any>;
 
@@ -179,94 +180,4 @@ export const XData = new _XData();
 export const _xd = XData;
 export default XData;
 
-
-
-
-export class XDataModule extends XModule {
-  static _name = "xd";
-
-  constructor() {
-    super({ _name: XDataModule._name });
-  }
-
-  async _get(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    return {
-      _ok: true,
-      _result: _xd.get(key)
-    };
-  }
-
-  async _set(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    _xd.set(key, params.value, {
-      source: params.source ?? "xd:set"
-    });
-
-    return {
-      _ok: true,
-      _result: { key }
-    };
-  }
-
-  async _patch(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    if (!_xu.is_plain_object(params.value)) {
-      throw new Error("xd patch expects value as plain object");
-    }
-
-    XData.patch(key, params.value, {
-      source: params.source ?? "xd:patch"
-    });
-
-    return {
-      _ok: true,
-      _result: { key }
-    };
-  }
-
-  async _delete(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    XData.delete(key, {
-      source: params.source ?? "xd:delete"
-    });
-
-    return {
-      _ok: true,
-      _result: { key }
-    };
-  }
-
-  async _touch(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    XData.touch(key, {
-      source: params.source ?? "xd:touch"
-    });
-
-    return {
-      _ok: true,
-      _result: { key }
-    };
-  }
-
-  async _has(xcmd: XCommand) {
-    const params = _xu.ensure_params(xcmd?._params);
-    const key = _xu.ensure_string(params.key, "key");
-
-    return {
-      _ok: true,
-      _result: _xd.has(key)
-    };
-  }
-}
 

@@ -106,8 +106,13 @@ export class XObjectManager {
     /**
      * Retrieves all the classes dictionary
      * @returns XObjectManagerIndex
+     * @deprecated use getObjectClasses() instead
      */
     getAllClasses():XObjectManagerIndex {
+        return this.getObjectClasses()
+    }
+
+    getObjectClasses():XObjectManagerIndex {
         return this.#_object_classes
     }
 

@@ -25,7 +25,7 @@
  */
 
 
-import { XUtils } from "./XUtils"
+import { _xu } from "./XUtils"
 import XCommand, { XCommandData } from "./XCommand";
 import XParser from "./XParser"
 import { XLogger as _xlog } from "./XLogger";
@@ -33,11 +33,71 @@ import { XEventListenerOptions, getXEventManager } from "./XEventManager";
 import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
 import _xd, { XDataStore } from "./XData";
 import { getXRuntime } from "./XRuntime";
+import type { XpellSkill, XpellSkillCommand } from "./XSkills";
 
 
-export type wordsList = {
-    [k: string]: string
-}
+export const XOBJECT_SKILL: XpellSkill = {
+    _id: "xobject",
+    _title: "XObject Core Runtime Contract",
+    _version: "1.0.0",
+    _active: true,
+    _type: "runtime-api-skill",
+
+    _description:
+        "Base runtime object for identity, typing, composition, lifecycle hooks, events, data binding, and nano-command execution.",
+
+    _fields: {
+        _id: "Unique object id.",
+        _type: "Registered runtime object type.",
+        _name: "Optional object name.",
+        _children: "Child objects/data.",
+        _data_source: "XData key to bind this object to.",
+        _on: "Event handlers map.",
+        _once: "One-time event handlers map.",
+        _on_create: "Lifecycle handler after object creation.",
+        _on_mount: "Lifecycle handler after mount.",
+        _on_frame: "Frame lifecycle handler.",
+        _on_data: "Data-source lifecycle handler.",
+        _process_frame: "Enable/disable frame processing.",
+        _process_data: "Enable/disable data-source processing.",
+        _debug: "Enable object debug logs."
+    },
+
+    _exports: {
+        _xui_fields: [
+            "_id",
+            "_type",
+            "_name",
+            "_children",
+            "_data_source",
+            "_on",
+            "_once",
+            "_on_create",
+            "_on_mount",
+            "_on_frame",
+            "_on_data",
+            "_process_frame",
+            "_process_data",
+            "_debug"
+        ],
+    },
+
+    _core_rules: [
+        "All Xpell runtime objects inherit this contract.",
+        "Generated object JSON must be data-only.",
+        "Do not generate JavaScript functions.",
+        "Use _children for composition.",
+        "Use _on/_once with nano-command strings or data-only command objects."
+    ],
+
+    _notes: [
+        "Runtime methods include parse, append, run, execute, bindDataSource, unbindDataSource, toXData, dispose, and removeChild.",
+        "Most prompts should use this skill as a compact dependency summary, not full context."
+    ]
+};
+
+
+export type wordsList = { [k: string]: string }
 
 const reservedWords: wordsList = { _children: "child nodes" }
 // const xpell_object_html_fields_mapping = { "_id": "id", "css-class": "class", "animation": "xyz", "input-type": "type" };
@@ -121,6 +181,7 @@ export type XObjectData = {
  */
 export class XObject {
     [k: string]: string | null | [] | undefined | Function | boolean | number | {} | null
+    static _xtype = "object"
     _id: string;
     _type: string;
     _children: Array<XObject | XObjectData> = []
@@ -163,6 +224,80 @@ export class XObject {
     private _xd_bound_key?: string;
 
 
+    /***
+     * Skills
+     */
+
+    static _skill: XpellSkill = XOBJECT_SKILL
+
+    static getOwnSkill(): XpellSkill {
+        const ctor = this as typeof XObject & {
+            _skill?: XpellSkill;
+            getNanoCommandSkills?: () => XpellSkillCommand[];
+        };
+
+        const base = ctor._skill ?? XOBJECT_SKILL;
+
+        return {
+            ...base,
+            _exports: {
+                ...(base._exports ?? {}),
+                _nano_commands:
+                    ctor.getNanoCommandSkills?.() ?? []
+            }
+        };
+    }
+
+    static getSkillChain(): XpellSkill[] {
+        const parent = Object.getPrototypeOf(this);
+
+        const parent_chain =
+            parent && typeof parent.getSkillChain === "function"
+                ? parent.getSkillChain()
+                : [];
+
+        const own_skill =
+            Object.prototype.hasOwnProperty.call(this, "_skill")
+                ? this.getOwnSkill()
+                : null;
+
+        return own_skill
+            ? [...parent_chain, own_skill]
+            : parent_chain;
+    }
+
+    static getOwnNanoCommands(): XNanoCommandPack {
+        return {
+            ..._xobject_basic_nano_commands
+        };
+    }
+
+    static getNanoCommands(): XNanoCommandPack {
+        return {
+            ...this.getOwnNanoCommands()
+        };
+    }
+
+    static getNanoCommandSkills(): XpellSkillCommand[] {
+        const ownsNanoCommands =
+            Object.prototype.hasOwnProperty.call(
+                this,
+                "getOwnNanoCommands"
+            );
+
+        if (!ownsNanoCommands) {
+            return [];
+        }
+
+        return Object
+            .values(this.getOwnNanoCommands())
+            .map((cmd: any) =>
+                cmd.getSkill?.() ??
+                cmd._skill
+            )
+            .filter(Boolean) as XpellSkillCommand[];
+    }
+
     /**
      * XObject constructor is creating the object and adding all the data keys to the XObject instance
      * @param data constructor input data (object)
@@ -172,10 +307,10 @@ export class XObject {
      */
     constructor(data: XObjectData, defaults?: any, skipParse?: boolean) {
         if (defaults) {
-            XUtils.mergeDefaultsWithData(data, defaults)
+            _xu.mergeDefaultsWithData(data, defaults)
         }
 
-        this._id = (data && data._id) ? data._id : "xo-" + XUtils.guid();
+        this._id = (data && data._id) ? data._id : "xo-" + _xu.guid();
         this._type = "object" //default type
         this._children = []
         this._nano_commands = {}
@@ -252,7 +387,7 @@ export class XObject {
     }
 
 
-    addEventListener(eventName: string, handler: XObjectOnEventHandler | string | any, options?: XEventListenerOptions) {
+    addEventListener(eventName: string, handler: XObjectOnEventHandler | string | any, options?: XEventListenerOptions): string {
         if (!options) {
             options = this._xem_options;
         }
@@ -267,6 +402,7 @@ export class XObject {
             this._event_listeners_ids[eventName] = [];
         }
         this._event_listeners_ids[eventName].push(event_listener_id);
+        return event_listener_id;
     }
 
 
@@ -329,7 +465,7 @@ export class XObject {
      * @param <XDataInstanceXporter> ie - the instance exporter object
      */
     addXporterInstanceXporter(classOfInstance: any, handler: XDataXporterHandler) {
-        const xporterName = XUtils.guid()
+        const xporterName = _xu.guid()
         this._xporter._instance_xporters[xporterName] = {
             cls: classOfInstance,
             handler: handler
@@ -431,23 +567,111 @@ export class XObject {
     }
 
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
-        // 1. ARRAY → sequential execution
-        if (Array.isArray(func)) {
-            for (const item of func) {
-                await this.checkAndRunInternalFunction(item, ...params);
+
+        const resolveValue = (val: any): any => {
+
+            if (typeof val === "string") {
+
+                if (val === "$event") return params[0];
+
+                if (val.startsWith("$event.")) {
+                    const path = val.slice(7).split(".");
+                    let cur = params[0];
+
+                    for (const p of path) {
+                        if (cur == null) return undefined;
+                        cur = cur[p];
+                    }
+
+                    return cur;
+                }
+
+                if (val === "$data") return params[0];
+
+                if (val.startsWith("$data.")) {
+                    const path = val.slice(6).split(".");
+                    let cur = params[0];
+
+                    for (const p of path) {
+                        if (cur == null) return undefined;
+                        cur = cur[p];
+                    }
+
+                    return cur;
+                }
+
+                return val;
             }
-            return;
+
+            if (Array.isArray(val)) {
+                return val.map(resolveValue);
+            }
+
+            if (val && typeof val === "object") {
+                const out: any = {};
+
+                for (const k of Object.keys(val)) {
+                    out[k] = resolveValue(val[k]);
+                }
+
+                return out;
+            }
+
+            return val;
+        };
+
+        const runOne = async (
+            handler: any,
+            previous_result?: any
+        ) => {
+
+            if (
+                previous_result !== undefined &&
+                handler &&
+                typeof handler === "object" &&
+                !Array.isArray(handler)
+            ) {
+                handler = {
+                    ...handler,
+                    _params: {
+                        ...(handler._params ?? {}),
+                        _prev: previous_result
+                    }
+                };
+            }
+
+            return await this.checkAndRunInternalFunction(
+                handler,
+                ...params
+            );
+        };
+
+        // 1. ARRAY -> sequential execution, backward compatible
+        if (Array.isArray(func)) {
+
+            let last_result: any;
+
+            for (const item of func) {
+                last_result = await runOne(
+                    item,
+                    last_result
+                );
+            }
+
+            return last_result;
         }
 
-        // 2. FUNCTION → direct call
+        // 2. FUNCTION -> direct call
         if (typeof func === "function") {
-            await func(this, ...params);
-            return;
+            return await func(this, ...params);
         }
 
-        // 3. STRING → parse → execute (NO string serialization)
+        // 3. STRING -> parse -> execute
         if (typeof func === "string") {
-            const parsed = XParser.parseObjectCommand(`${this._id} ${func}`);
+            const parsed =
+                XParser.parseObjectCommand(
+                    `${this._id} ${func}`
+                );
 
             if (params.length > 0) {
                 parsed._params = parsed._params || {};
@@ -457,17 +681,80 @@ export class XObject {
                 parsed._params._event = payload;
 
                 // backward compatibility
-                // ONLY set data if it's not already set AND payload is not a DOM event
                 if (!parsed._params.data && !payload?.target) {
                     parsed._params.data = payload;
                 }
             }
 
-            await this.execute(parsed);
-            return;
+            return await this.execute(parsed);
         }
 
-        // 4. JSON command object → execute directly
+        // 4. JSON MULTI-COMMAND OBJECT -> new structured mode
+        if (
+            func &&
+            typeof func === "object" &&
+            Array.isArray((func as any)._commands)
+        ) {
+            const cfg = func as any;
+
+            const mode =
+                typeof cfg._mode === "string"
+                    ? cfg._mode
+                    : "sequence";
+
+            const stop_on_error =
+                cfg._stop_on_error !== false;
+
+            const commands =
+                cfg._commands;
+
+            if (mode === "parallel") {
+                const results =
+                    await Promise.allSettled(
+                        commands.map((cmd: any) =>
+                            runOne(cmd)
+                        )
+                    );
+
+                const rejected =
+                    results.find(
+                        (r) => r.status === "rejected"
+                    ) as PromiseRejectedResult | undefined;
+
+                if (rejected && stop_on_error) {
+                    throw rejected.reason;
+                }
+
+                return results;
+            }
+
+            // sequence / chain
+            let last_result: any;
+
+            for (const cmd of commands) {
+                try {
+                    last_result = await runOne(
+                        cmd,
+                        mode === "chain"
+                            ? last_result
+                            : undefined
+                    );
+                } catch (err) {
+                    _xlog.error(
+                        this._type + "->" + this._id + "] command sequence failed",
+                        err
+                    );
+
+                    if (stop_on_error) {
+                        throw err;
+                    }
+                }
+            }
+
+            return last_result;
+        }
+
+        // 5. JSON command object -> existing behavior
         if (func && typeof func === "object" && (func as any)._op) {
             const fcmd = func as any;
 
@@ -485,24 +772,37 @@ export class XObject {
                 return;
             }
 
-            const localCmd: { _op: string; _params?: any } = {
-                _op: fcmd._op,
-                _params: fcmd._params ? { ...fcmd._params } : {},
+            const localCmd: any = {
+                ...fcmd,
+                _params: fcmd._params
+                    ? { ...fcmd._params }
+                    : {},
             };
 
             if (params.length > 0) {
                 const payload = params[0];
 
-                // backward compatibility
-                if (!Object.prototype.hasOwnProperty.call(localCmd._params, "data")) {
+                if (
+                    !Object.prototype.hasOwnProperty.call(
+                        localCmd._params,
+                        "data"
+                    )
+                ) {
                     localCmd._params.data = payload;
                 }
 
-                // ✅ NEW: pass raw event / payload
-                if (!Object.prototype.hasOwnProperty.call(localCmd._params, "_event")) {
+                if (
+                    !Object.prototype.hasOwnProperty.call(
+                        localCmd._params,
+                        "_event"
+                    )
+                ) {
                     localCmd._params._event = payload;
                 }
             }
+
+            localCmd._params =
+                resolveValue(localCmd._params);
 
             if (this._debug) {
                 _xlog.log(
@@ -512,11 +812,10 @@ export class XObject {
                 );
             }
 
-            await this.execute(localCmd as any);
-            return;
+            return await this.execute(localCmd as any);
         }
 
-        // 5. INVALID
+        // 6. INVALID
         _xlog.error(
             this._type + "->" + this._id + "] invalid handler in checkAndRunInternalFunction",
             func
@@ -676,24 +975,14 @@ export class XObject {
         }
 
         // --------------------------------------------------
-        // 1. LOCAL NANO COMMAND (PRIORITY - backward compat)
+        // 1. MODULE ROUTING HAS PRIORITY
         // --------------------------------------------------
-        if (this._nano_commands[op]) {
-            try {
-                return await this._nano_commands[op](<XCommand>xCommand, this);
-            } catch (err) {
-                _xlog.error(this._id + " has error with command name " + op + " " + err);
-                return;
-            }
-        }
 
-        // --------------------------------------------------
-        // 2. MODULE ROUTING (NEW)
-        // --------------------------------------------------
         const moduleName = (xCommand as any)?._module;
 
         if (moduleName) {
             try {
+
                 const _x = getXRuntime();
 
                 return await _x.execute({
@@ -702,18 +991,44 @@ export class XObject {
                 });
 
             } catch (err) {
+
                 _xlog.error(
                     this._id +
                     " module execution failed: " +
                     moduleName + "." + op + " " + err
                 );
+
                 return;
             }
         }
 
         // --------------------------------------------------
-        // 3. DEFAULT (same behavior as today)
+        // 2. LOCAL NANO COMMANDS
         // --------------------------------------------------
+
+        if (this._nano_commands[op]) {
+            try {
+                return await this._nano_commands[op](
+                    <XCommand>xCommand,
+                    this
+                );
+
+            } catch (err) {
+
+                _xlog.error(
+                    this._id +
+                    " has error with command name " +
+                    op + " " + err
+                );
+
+                return;
+            }
+        }
+
+        // --------------------------------------------------
+        // 3. DEFAULT
+        // --------------------------------------------------
+
         _xlog.error(this._id + " has no command name " + op);
     }
 
