@@ -146,6 +146,26 @@ export type XObjectOnEventHandler =
 export interface XObjectOnEventIndex {
     [eventName: string]: XObjectOnEventHandler
 }
+export type XArtifactStrategy = "canonical" | "merge" | "generator";
+
+export type XArtifactIntent = {
+    _id?: string;
+    _name?: string;
+    _label?: string;
+    _text?: string;
+    _title?: string;
+    _description?: string;
+    _entity?: string;
+    _action?: string;
+    _flow_id?: string;
+    _payload?: Record<string, any>;
+    [key: string]: any;
+};
+
+export type XArtifactValidationResult = {
+    _ok: boolean;
+    _errors: string[];
+};
 
 type XObjectHandler = Function | string | XCommandData | XObjectHandler[];
 
@@ -297,6 +317,98 @@ export class XObject {
             )
             .filter(Boolean) as XpellSkillCommand[];
     }
+
+    static getArtifactStrategy(): XArtifactStrategy {
+        return "canonical";
+    }
+
+    static generateArtifact(intent: XArtifactIntent = {}): XObjectData {
+        const skill = this.getOwnSkill?.();
+        const example = skill?._canonical_examples?.[0];
+
+        const artifact: any = example
+            ? this.cloneArtifact(example)
+            : { _type: (this as any)._xtype ?? skill?._id ?? "object" };
+
+        return this.applyArtifactIntent(artifact, intent);
+    }
+
+    protected static cloneArtifact<T>(value: T): T {
+        return typeof structuredClone === "function"
+            ? structuredClone(value)
+            : JSON.parse(JSON.stringify(value));
+    }
+
+    protected static applyArtifactIntent<T extends XObjectData>(
+        artifact: T,
+        intent: XArtifactIntent = {}
+    ): T {
+        const out: any = artifact;
+
+        if (intent._id) out._id = intent._id;
+
+        if (intent._label) {
+            if ("_label" in out) out._label = intent._label;
+            else if ("_text" in out) out._text = intent._label;
+            else if ("_title" in out) out._title = intent._label;
+        }
+
+        if (intent._text && "_text" in out) out._text = intent._text;
+        if (intent._title && "_title" in out) out._title = intent._title;
+        if (intent._description && "_description" in out) out._description = intent._description;
+
+        if (intent._variant && "_variant" in out) out._variant = intent._variant;
+        if (intent._tone && "_tone" in out) out._tone = intent._tone;
+        if (intent._size && "_size" in out) out._size = intent._size;
+        if (intent._density && "_density" in out) out._density = intent._density;
+        if (intent._elevation && "_elevation" in out) out._elevation = intent._elevation;
+
+        if (intent.class) out.class = intent.class;
+
+        if (intent._placeholder) {
+            if ("placeholder" in out) out.placeholder = intent._placeholder;
+            else if ("_placeholder" in out) out._placeholder = intent._placeholder;
+        }
+
+        if (intent._data_output && "_data_output" in out) {
+            out._data_output = intent._data_output;
+        }
+
+        if (Array.isArray(intent._children)) out._children = intent._children;
+        if (Array.isArray(intent._actions)) out._actions = intent._actions;
+        if (Array.isArray(intent._items)) out._items = intent._items;
+
+        if (intent._flow_id) {
+            out._flow = {
+                _id: intent._flow_id,
+                _payload: intent._payload ?? {}
+            };
+        }
+
+        if (intent._flow_event) {
+            out._flow_event = intent._flow_event;
+        }
+
+        return out as T;
+    }
+
+    static validateArtifact(data: XObjectData): XArtifactValidationResult {
+        const errors: string[] = [];
+
+        if (!data || typeof data !== "object") {
+            errors.push("artifact must be an object");
+        }
+
+        if (!data._type) {
+            errors.push("artifact requires _type");
+        }
+
+        return {
+            _ok: errors.length === 0,
+            _errors: errors
+        };
+    }
+
 
     /**
      * XObject constructor is creating the object and adding all the data keys to the XObject instance

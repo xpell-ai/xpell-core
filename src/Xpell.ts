@@ -333,7 +333,10 @@ export {
     type XDataXporterHandler,
     type XObjectData,
     type XObjectOnEventIndex,
-    type XObjectOnEventHandler
+    type XObjectOnEventHandler,
+    type XArtifactIntent,
+    type XArtifactValidationResult,
+    type XArtifactStrategy
 } from "./XObject"
 export { XObjectManager } from "./XObjectManager"
 export {
