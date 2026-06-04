@@ -364,8 +364,14 @@ export class XModule {
         }
 
         // 2) Module-level operation: call methods that start with "_" only
-        // "my-op" => "_my_op"
-        const lop = "_" + xCommand._op.replaceAll("-", "_");
+        // "my-op" => "_my_op" with fallback to original command name for backward compatibility
+        const rawOp = xCommand._op;
+        const op =
+            rawOp.startsWith("_") && rawOp.length > 1
+                ? rawOp.slice(1)
+                : rawOp;
+
+        const lop = "_" + op.replaceAll("-", "_");
         const fn = (this as any)[lop];
 
         if (typeof fn === "function") {

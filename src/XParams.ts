@@ -45,7 +45,6 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
-import src from "xpell-core";
 
 
 export type XCmdLike =
@@ -59,18 +58,18 @@ export class XParams {
   /* -------------------------------------------------- */
 
   static get(cmd: any, key: string | number, def?: any) {
-    if (!cmd?._params) return def;
-    const v = cmd._params[key as any];
+    const src = cmd?._params ?? cmd;
+    const v = src?.[key as any];
     return v !== undefined ? v : def;
   }
 
   static has(cmd: any, key: string | number) {
-    const src =cmd?._params || cmd;
+    const src = cmd?._params ?? cmd;
     return src[key as any] !== undefined;
   }
 
-  static str(cmd: any,...keys: (string | number)[]) {
-    const src =cmd?._params || cmd;
+  static str(cmd: any, ...keys: (string | number)[]) {
+    const src = cmd?._params ?? cmd;
     for (const k of keys) {
 
       const v =
@@ -94,7 +93,7 @@ export class XParams {
   /* -------------------------------------------------- */
 
   static bool(cmd: any, key: string | number, def = false): boolean {
-    const src =cmd?._params || cmd;
+    const src = cmd?._params ?? cmd;
     const v = this.get(src, key, def);
 
     if (typeof v === "boolean") return v;
@@ -110,14 +109,14 @@ export class XParams {
   }
 
   static int(cmd: any, key: string | number, def = 0): number {
-    const src =cmd?._params || cmd;
+    const src = cmd?._params ?? cmd;
     const v = this.get(src, key, def);
     const n = parseInt(String(v), 10);
     return Number.isFinite(n) ? n : def;
   }
 
   static json<T = any>(cmd: any, key: string | number, def?: T): T | undefined {
-    const src =cmd?._params || cmd;
+    const src = cmd?._params ?? cmd;
     const v = this.get(src, key, def);
 
     if (v === undefined || v === null) return def;

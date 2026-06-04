@@ -519,18 +519,45 @@ export class XObject {
 
 
     removeEventListener(eventName: string) {
-        const listenerIds = this._event_listeners_ids[eventName]
-        if (listenerIds && listenerIds.length) {
-            listenerIds.forEach((listenerId) => {
-                getXEventManager().remove(listenerId)
-            })
-            delete this._event_listeners_ids[eventName]
+        const index = (this as any)._event_listeners_ids;
+
+        if (!index || typeof index !== "object" || Array.isArray(index)) {
+            (this as any)._event_listeners_ids = {};
+            return;
         }
+
+        const listenerIds = Array.isArray(index[eventName])
+            ? [...index[eventName]]
+            : [];
+
+        listenerIds.forEach((listenerId) => {
+            try {
+                getXEventManager().remove(listenerId);
+            } catch {
+                // ignore stale listener id
+            }
+        });
+
+        delete index[eventName];
     }
 
-    removeAllEventListeners() {
-        const keys = Object.keys(this._event_listeners_ids)
-        keys.forEach(key => this.removeEventListener(key))
+    removeAllEventListeners(eventName?: string) {
+        const index = (this as any)._event_listeners_ids;
+
+        if (!index || typeof index !== "object" || Array.isArray(index)) {
+            (this as any)._event_listeners_ids = {};
+            return;
+        }
+
+        const keys = eventName ? [eventName] : Object.keys(index);
+
+        keys.forEach((key) => {
+            try {
+                this.removeEventListener(key);
+            } catch {
+                // Backward-compatible cleanup: ignore stale/broken listener indexes.
+            }
+        });
     }
 
 
@@ -679,51 +706,47 @@ export class XObject {
     }
 
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
+        const resolvePath = (root: any, pathText: string): any => {
+            const path = pathText.split(".");
+            let cur = root;
 
-        const resolveValue = (val: any): any => {
+            for (const p of path) {
+                if (cur == null) return undefined;
+                cur = cur[p];
+            }
 
+            return cur;
+        };
+
+        const resolveValue = (val: any, previous_result?: any): any => {
             if (typeof val === "string") {
+                if (val === "$prev") return previous_result;
+                if (val.startsWith("$prev.")) {
+                    return resolvePath(previous_result, val.slice(6));
+                }
 
                 if (val === "$event") return params[0];
-
                 if (val.startsWith("$event.")) {
-                    const path = val.slice(7).split(".");
-                    let cur = params[0];
-
-                    for (const p of path) {
-                        if (cur == null) return undefined;
-                        cur = cur[p];
-                    }
-
-                    return cur;
+                    return resolvePath(params[0], val.slice(7));
                 }
 
                 if (val === "$data") return params[0];
-
                 if (val.startsWith("$data.")) {
-                    const path = val.slice(6).split(".");
-                    let cur = params[0];
-
-                    for (const p of path) {
-                        if (cur == null) return undefined;
-                        cur = cur[p];
-                    }
-
-                    return cur;
+                    return resolvePath(params[0], val.slice(6));
                 }
 
                 return val;
             }
 
             if (Array.isArray(val)) {
-                return val.map(resolveValue);
+                return val.map((item) => resolveValue(item, previous_result));
             }
 
             if (val && typeof val === "object") {
                 const out: any = {};
 
                 for (const k of Object.keys(val)) {
-                    out[k] = resolveValue(val[k]);
+                    out[k] = resolveValue(val[k], previous_result);
                 }
 
                 return out;
@@ -735,203 +758,180 @@ export class XObject {
         const runOne = async (
             handler: any,
             previous_result?: any
-        ) => {
+        ): Promise<any> => {
+            // 1. ARRAY -> sequential execution
+            if (Array.isArray(handler)) {
+                let last_result: any;
 
-            if (
-                previous_result !== undefined &&
-                handler &&
-                typeof handler === "object" &&
-                !Array.isArray(handler)
-            ) {
-                handler = {
-                    ...handler,
-                    _params: {
-                        ...(handler._params ?? {}),
-                        _prev: previous_result
-                    }
-                };
+                for (const item of handler) {
+                    last_result = await runOne(item, last_result);
+                }
+
+                return last_result;
             }
 
-            return await this.checkAndRunInternalFunction(
-                handler,
-                ...params
+            // 2. FUNCTION -> direct call
+            if (typeof handler === "function") {
+                return await handler(this, ...params);
+            }
+
+            // 3. STRING -> parse -> execute
+            if (typeof handler === "string") {
+                const parsed =
+                    XParser.parseObjectCommand(
+                        `${this._id} ${handler}`
+                    );
+
+                if (params.length > 0) {
+                    parsed._params = parsed._params || {};
+
+                    const payload = params[0];
+
+                    parsed._params._event = payload;
+
+                    // backward compatibility
+                    if (!parsed._params.data && !payload?.target) {
+                        parsed._params.data = payload;
+                    }
+                }
+
+                return await this.execute(parsed);
+            }
+
+            // 4. JSON MULTI-COMMAND OBJECT
+            if (
+                handler &&
+                typeof handler === "object" &&
+                Array.isArray((handler as any)._commands)
+            ) {
+                const cfg = handler as any;
+
+                const mode =
+                    typeof cfg._mode === "string"
+                        ? cfg._mode
+                        : "sequence";
+
+                const stop_on_error =
+                    cfg._stop_on_error !== false;
+
+                const commands = cfg._commands;
+
+                if (mode === "parallel") {
+                    const results =
+                        await Promise.allSettled(
+                            commands.map((cmd: any) =>
+                                runOne(cmd, previous_result)
+                            )
+                        );
+
+                    const rejected =
+                        results.find(
+                            (r) => r.status === "rejected"
+                        ) as PromiseRejectedResult | undefined;
+
+                    if (rejected && stop_on_error) {
+                        throw rejected.reason;
+                    }
+
+                    return results;
+                }
+
+                let last_result: any = previous_result;
+
+                for (const cmd of commands) {
+                    try {
+                        last_result = await runOne(
+                            cmd,
+                            mode === "chain"
+                                ? last_result
+                                : previous_result
+                        );
+                    } catch (err) {
+                        _xlog.error(
+                            this._type + "->" + this._id + "] command sequence failed",
+                            err
+                        );
+
+                        if (stop_on_error) {
+                            throw err;
+                        }
+                    }
+                }
+
+                return last_result;
+            }
+
+            // 5. JSON command object
+            if (handler && typeof handler === "object" && (handler as any)._op) {
+                const fcmd = handler as any;
+
+                const target =
+                    fcmd._object === undefined ||
+                        fcmd._object === null ||
+                        fcmd._object === "this"
+                        ? this._id
+                        : fcmd._object;
+
+                if (target !== this._id) {
+                    _xlog.error(
+                        "XObject JSON handler target not supported; expected _object omitted/'this'/" + this._id
+                    );
+                    return;
+                }
+
+                const localCmd: any = {
+                    ...fcmd,
+                    _params: fcmd._params
+                        ? { ...fcmd._params }
+                        : {},
+                };
+
+                if (params.length > 0) {
+                    const payload = params[0];
+
+                    if (
+                        !Object.prototype.hasOwnProperty.call(
+                            localCmd._params,
+                            "data"
+                        )
+                    ) {
+                        localCmd._params.data = payload;
+                    }
+
+                    if (
+                        !Object.prototype.hasOwnProperty.call(
+                            localCmd._params,
+                            "_event"
+                        )
+                    ) {
+                        localCmd._params._event = payload;
+                    }
+                }
+
+                localCmd._params = resolveValue(
+                    localCmd._params,
+                    previous_result
+                );
+
+                if (this._debug) {
+                    _xlog.log(
+                        this._type + "->" + this._id + "]",
+                        "JSON handler executed locally",
+                        localCmd
+                    );
+                }
+
+                return await this.execute(localCmd as any);
+            }
+
+            // 6. INVALID
+            _xlog.error(
+                this._type + "->" + this._id + "] invalid handler in checkAndRunInternalFunction",
+                handler
             );
         };
 
-        // 1. ARRAY -> sequential execution, backward compatible
-        if (Array.isArray(func)) {
-
-            let last_result: any;
-
-            for (const item of func) {
-                last_result = await runOne(
-                    item,
-                    last_result
-                );
-            }
-
-            return last_result;
-        }
-
-        // 2. FUNCTION -> direct call
-        if (typeof func === "function") {
-            return await func(this, ...params);
-        }
-
-        // 3. STRING -> parse -> execute
-        if (typeof func === "string") {
-            const parsed =
-                XParser.parseObjectCommand(
-                    `${this._id} ${func}`
-                );
-
-            if (params.length > 0) {
-                parsed._params = parsed._params || {};
-
-                const payload = params[0];
-
-                parsed._params._event = payload;
-
-                // backward compatibility
-                if (!parsed._params.data && !payload?.target) {
-                    parsed._params.data = payload;
-                }
-            }
-
-            return await this.execute(parsed);
-        }
-
-        // 4. JSON MULTI-COMMAND OBJECT -> new structured mode
-        if (
-            func &&
-            typeof func === "object" &&
-            Array.isArray((func as any)._commands)
-        ) {
-            const cfg = func as any;
-
-            const mode =
-                typeof cfg._mode === "string"
-                    ? cfg._mode
-                    : "sequence";
-
-            const stop_on_error =
-                cfg._stop_on_error !== false;
-
-            const commands =
-                cfg._commands;
-
-            if (mode === "parallel") {
-                const results =
-                    await Promise.allSettled(
-                        commands.map((cmd: any) =>
-                            runOne(cmd)
-                        )
-                    );
-
-                const rejected =
-                    results.find(
-                        (r) => r.status === "rejected"
-                    ) as PromiseRejectedResult | undefined;
-
-                if (rejected && stop_on_error) {
-                    throw rejected.reason;
-                }
-
-                return results;
-            }
-
-            // sequence / chain
-            let last_result: any;
-
-            for (const cmd of commands) {
-                try {
-                    last_result = await runOne(
-                        cmd,
-                        mode === "chain"
-                            ? last_result
-                            : undefined
-                    );
-                } catch (err) {
-                    _xlog.error(
-                        this._type + "->" + this._id + "] command sequence failed",
-                        err
-                    );
-
-                    if (stop_on_error) {
-                        throw err;
-                    }
-                }
-            }
-
-            return last_result;
-        }
-
-        // 5. JSON command object -> existing behavior
-        if (func && typeof func === "object" && (func as any)._op) {
-            const fcmd = func as any;
-
-            const target =
-                fcmd._object === undefined ||
-                    fcmd._object === null ||
-                    fcmd._object === "this"
-                    ? this._id
-                    : fcmd._object;
-
-            if (target !== this._id) {
-                _xlog.error(
-                    "XObject JSON handler target not supported; expected _object omitted/'this'/" + this._id
-                );
-                return;
-            }
-
-            const localCmd: any = {
-                ...fcmd,
-                _params: fcmd._params
-                    ? { ...fcmd._params }
-                    : {},
-            };
-
-            if (params.length > 0) {
-                const payload = params[0];
-
-                if (
-                    !Object.prototype.hasOwnProperty.call(
-                        localCmd._params,
-                        "data"
-                    )
-                ) {
-                    localCmd._params.data = payload;
-                }
-
-                if (
-                    !Object.prototype.hasOwnProperty.call(
-                        localCmd._params,
-                        "_event"
-                    )
-                ) {
-                    localCmd._params._event = payload;
-                }
-            }
-
-            localCmd._params =
-                resolveValue(localCmd._params);
-
-            if (this._debug) {
-                _xlog.log(
-                    this._type + "->" + this._id + "]",
-                    "JSON handler executed locally",
-                    localCmd
-                );
-            }
-
-            return await this.execute(localCmd as any);
-        }
-
-        // 6. INVALID
-        _xlog.error(
-            this._type + "->" + this._id + "] invalid handler in checkAndRunInternalFunction",
-            func
-        );
+        return await runOne(func);
     }
 
 
@@ -1079,7 +1079,11 @@ export class XObject {
      */
     async execute(xCommand: XCommand | XCommandData) {
 
-        const op = xCommand?._op;
+        const rawOp = xCommand?._op;
+        const op =
+            typeof rawOp === "string" && rawOp.startsWith("_") && rawOp.length > 1
+                ? rawOp.slice(1)
+                : rawOp;
 
         if (!op) {
             _xlog.error(this._id + " missing _op in command");
@@ -1097,10 +1101,12 @@ export class XObject {
 
                 const _x = getXRuntime();
 
-                return await _x.execute({
+                const result = await _x.execute({
                     ...(xCommand as any),
-                    _module: moduleName
+                    _module: moduleName,
+                    _op: op
                 });
+                return result;
 
             } catch (err) {
 
@@ -1120,8 +1126,12 @@ export class XObject {
 
         if (this._nano_commands[op]) {
             try {
+                const normalizedCommand = {
+                    ...(xCommand as any),
+                    _op: op
+                };
                 return await this._nano_commands[op](
-                    <XCommand>xCommand,
+                    <XCommand>normalizedCommand,
                     this
                 );
 
