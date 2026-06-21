@@ -262,33 +262,11 @@ export class _XUtils {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
 
-  ensure_object(value: unknown, field: string): Record<string, any> {
-    if (!this.is_plain_object(value)) {
-      throw new Error(`Invalid '${field}'`);
-    }
-    return value;
-  }
-
   ensure_string(value: unknown, field: string): string {
     if (typeof value !== "string" || !value.trim()) {
       throw new Error(`Invalid '${field}'`);
     }
     return value.trim();
-  }
-
-  ensure_boolean(value: unknown, field: string): boolean {
-    if (typeof value === "boolean") return value;
-    if (value === "true") return true;
-    if (value === "false") return false;
-    throw new Error(`Invalid '${field}'`);
-  }
-
-  ensure_number(value: unknown, field: string): number {
-    const num = Number(value);
-    if (isNaN(num)) {
-      throw new Error(`Invalid '${field}'`);
-    }
-    return num;
   }
 
   ensure_params(raw: unknown): Record<string, any> {
@@ -526,36 +504,6 @@ export class _XUtils {
       throw new Error(`Invalid '${field_name}': expected non-empty string`);
     }
     return value.trim();
-  }
-
-  read_optional_boolean(value: unknown, field_name: string): boolean | undefined {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (typeof value !== "boolean") {
-      throw new Error(`Invalid '${field_name}': expected boolean`);
-    }
-    return value;
-  }
-
-  read_optional_number(value: unknown, field_name: string): number | undefined {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (typeof value !== "number" || !isFinite(value)) {
-      throw new Error(`Invalid '${field_name}': expected finite number`);
-    }
-    return value;
-  }
-
-  read_optional_object(value: unknown, field_name: string): Record<string, any> | undefined {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-    if (!this.is_plain_object(value)) {
-      throw new Error(`Invalid '${field_name}': expected plain object`);
-    }
-    return value;
   }
 
   /**

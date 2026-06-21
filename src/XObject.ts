@@ -718,35 +718,133 @@ export class XObject {
             return cur;
         };
 
-        const resolveValue = (val: any, previous_result?: any): any => {
+        const resolveValue = (
+            val: any,
+            previous_result?: any,
+            context?: Record<string, any>
+        ): any => {
+
             if (typeof val === "string") {
+
+                // Existing built-ins
+
                 if (val === "$prev") return previous_result;
+
                 if (val.startsWith("$prev.")) {
-                    return resolvePath(previous_result, val.slice(6));
+                    return resolvePath(
+                        previous_result,
+                        val.slice(6)
+                    );
                 }
 
                 if (val === "$event") return params[0];
+
                 if (val.startsWith("$event.")) {
-                    return resolvePath(params[0], val.slice(7));
+                    return resolvePath(
+                        params[0],
+                        val.slice(7)
+                    );
                 }
 
+                // $data is mostly events data, but can also be used for other purposes (e.g. $data._app_id)
                 if (val === "$data") return params[0];
+
                 if (val.startsWith("$data.")) {
-                    return resolvePath(params[0], val.slice(6));
+                    return resolvePath(
+                        params[0],
+                        val.slice(6)
+                    );
+                }
+
+                // $xdata is the global XData store, accessible from any context
+
+                if (val.startsWith("$xdata:") || val.startsWith("$xdata.")) {
+                    const expr =
+                        val.startsWith("$xdata:")
+                            ? val.slice("$xdata:".length)
+                            : val.slice("$xdata.".length);
+
+                    const parts = expr.split(".");
+
+                    for (let i = parts.length; i > 0; i--) {
+                        const key = parts.slice(0, i).join(".");
+
+                        if (_xd.has(key)) {
+                            const root = _xd.get(key);
+                            const path = parts.slice(i).join(".");
+
+                            return path ? _xu.get_path(root, path) : root;
+                        }
+                    }
+
+                    return undefined;
+                }
+
+                // Generic context resolver
+                // Supports:
+                // $row
+                // $row._app_id
+                // $user.email
+                // $record.name
+                // etc.
+
+                if (
+                    val.startsWith("$") &&
+                    context &&
+                    typeof context === "object"
+                ) {
+                    const expr = val.slice(1);
+
+                    const dot =
+                        expr.indexOf(".");
+
+                    const root =
+                        dot === -1
+                            ? expr
+                            : expr.slice(0, dot);
+
+                    const path =
+                        dot === -1
+                            ? ""
+                            : expr.slice(dot + 1);
+
+                    if (
+                        Object.prototype.hasOwnProperty.call(
+                            context,
+                            root
+                        )
+                    ) {
+                        const ctx =
+                            context[root];
+
+                        return path
+                            ? resolvePath(ctx, path)
+                            : ctx;
+                    }
                 }
 
                 return val;
             }
 
             if (Array.isArray(val)) {
-                return val.map((item) => resolveValue(item, previous_result));
+                return val.map(item =>
+                    resolveValue(
+                        item,
+                        previous_result,
+                        context
+                    )
+                );
             }
 
             if (val && typeof val === "object") {
                 const out: any = {};
 
                 for (const k of Object.keys(val)) {
-                    out[k] = resolveValue(val[k], previous_result);
+                    out[k] = resolveValue(
+                        val[k],
+                        previous_result,
+                        context
+                    );
                 }
 
                 return out;
@@ -908,9 +1006,12 @@ export class XObject {
                     }
                 }
 
+
+
                 localCmd._params = resolveValue(
                     localCmd._params,
-                    previous_result
+                    previous_result,
+                    (this as any)._context
                 );
 
                 if (this._debug) {

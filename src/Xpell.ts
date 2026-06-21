@@ -36,7 +36,8 @@
 
 /** interface */
 import XCommand, { XCommandData } from "./XCommand"
-import { _xu, FPSCalc, XFrameScheduler } from "./XUtils"
+import { _xu ,XFrameScheduler } from "./XUtils"
+import {FPSCalc} from "./FPSCalc"
 import { XLogger as _xlog } from "./XLogger"
 import { _xd } from "./XData"
 import { XDataModule } from "./XDataModule"

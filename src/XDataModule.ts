@@ -95,6 +95,16 @@ export class XDataModule extends XModule {
       _params: {
         key: "XData key."
       }
+    },
+    get_path: {
+      _name: "get_path",
+      _scope: "module",
+      _description: "Get nested value from an XData value.",
+      _params: {
+        key: "XData key.",
+        path: "Nested path inside the stored value.",
+        fallback: "Optional fallback value."
+      }
     }
 
   };
@@ -102,6 +112,7 @@ export class XDataModule extends XModule {
   constructor() {
     super({ _name: XDataModule._name });
   }
+
 
   async _get(xcmd: XCommand) {
     const params = _xu.ensure_params(xcmd?._params);
@@ -182,6 +193,73 @@ export class XDataModule extends XModule {
     return {
       _ok: true,
       _result: _xd.has(key)
+    };
+  }
+
+  async _get_path(xcmd: XCommand) {
+    const params =
+      _xu.ensure_params(xcmd?._params);
+
+    const key =
+      _xu.ensure_string(params.key, "key");
+
+    const path =
+      _xu.ensure_string(params.path, "path");
+
+    const root =
+      _xd.get(key);
+
+    const value =
+      _xu.get_path(
+        root,
+        path,
+        params.fallback
+      );
+
+    return {
+      _ok: true,
+      _result: value
+    };
+  }
+
+  async _log(xcmd: XCommand) {
+    const params =
+      _xu.ensure_params(xcmd?._params);
+
+    const key =
+      _xu.ensure_string(params.key, "key");
+
+    const root =
+      _xd.get(key);
+
+    const path =
+      _xu.read_optional_string(
+        params.path,
+        "path"
+      );
+
+    const value =
+      path
+        ? _xu.get_path(
+          root,
+          path,
+          params.fallback
+        )
+        : root;
+
+    _xlog.log("XDATA LOG", {
+      key,
+      path,
+      value
+    });
+
+    return {
+      _ok: true,
+      _result: {
+        key,
+        path,
+        value
+      }
     };
   }
 }
