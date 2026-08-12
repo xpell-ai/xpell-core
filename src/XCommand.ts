@@ -39,6 +39,12 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
+export type XCommandOutputData = {
+    _target?: string,
+    _key?: string,
+    _path?: string
+}
+
 export type XCommandData = {
     _module: string,
     _object?: string,
@@ -53,6 +59,7 @@ export type XCommandData = {
             | object
             | any[]
     },
+    _output?: XCommandOutputData
 }
 
 
@@ -80,6 +87,11 @@ export  class XCommand {
     _params?: {
         [k:string] : string | number | boolean | null | object | any[]
     }
+
+    /**
+     * Optional output routing metadata.
+     */
+    _output?: XCommandOutputData
 
 
     /**

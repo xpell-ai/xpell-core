@@ -34,6 +34,7 @@ import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./
 import _xd, { XDataStore } from "./XData";
 import { getXRuntime } from "./XRuntime";
 import type { XpellSkill, XpellSkillCommand } from "./XSkills";
+import { XCommandRuntime } from "./XCommandRuntime";
 
 
 export const XOBJECT_SKILL: XpellSkill = {
@@ -52,12 +53,16 @@ export const XOBJECT_SKILL: XpellSkill = {
         _name: "Optional object name.",
         _children: "Child objects/data.",
         _data_source: "XData key to bind this object to.",
+        _data_path: "Optional dot-path projected from _data_source before _on_data executes.",
+        _requires: "XData readiness key or keys required before mount handlers run.",
+        _persist: "Optional declarative string persistence config. V1 supports xdb-client only.",
         _on: "Event handlers map.",
         _once: "One-time event handlers map.",
         _on_create: "Lifecycle handler after object creation.",
         _on_mount: "Lifecycle handler after mount.",
         _on_frame: "Frame lifecycle handler.",
         _on_data: "Data-source lifecycle handler.",
+        _on_change: "Change lifecycle handler.",
         _process_frame: "Enable/disable frame processing.",
         _process_data: "Enable/disable data-source processing.",
         _debug: "Enable object debug logs."
@@ -70,12 +75,16 @@ export const XOBJECT_SKILL: XpellSkill = {
             "_name",
             "_children",
             "_data_source",
+            "_data_path",
+            "_requires",
+            "_persist",
             "_on",
             "_once",
             "_on_create",
             "_on_mount",
             "_on_frame",
             "_on_data",
+            "_on_change",
             "_process_frame",
             "_process_data",
             "_debug"
@@ -169,6 +178,20 @@ export type XArtifactValidationResult = {
 
 type XObjectHandler = Function | string | XCommandData | XObjectHandler[];
 
+export type XObjectPersistConfig =
+    | string
+    | {
+        _store?: string;
+        _key?: string;
+        _default?: string;
+    };
+
+type XObjectNormalizedPersistConfig = {
+    _store: "xdb-client";
+    _key: string;
+    _default?: string;
+};
+
 export type XObjectData = {
     [k: string]: XValue;
 
@@ -178,6 +201,8 @@ export type XObjectData = {
 
     _name?: string;
     _data_source?: string;
+    _data_path?: string;
+    _requires?: string | string[];
 
     _on?: XObjectOnEventIndex;
     _once?: XObjectOnEventIndex;
@@ -186,6 +211,8 @@ export type XObjectData = {
     _on_mount?: XObjectHandler;
     _on_frame?: XObjectHandler;
     _on_data?: XObjectHandler;
+    _on_change?: XObjectHandler;
+    _persist?: XObjectPersistConfig;
 
     _process_frame?: boolean;
     _process_data?: boolean;
@@ -208,6 +235,8 @@ export class XObject {
     _parent: XObject | null = null
     _name?: string
     _data_source?: string //XData source
+    _data_path?: string // optional nested path inside XData source
+    _requires?: string | string[] // XData readiness dependencies before mount handlers
     _debug?: boolean //debug mode for the XObject
     _on: XObjectOnEventIndex = {}
     _once: XObjectOnEventIndex = {}
@@ -215,7 +244,9 @@ export class XObject {
     _on_mount?: XObjectHandler | undefined
     _on_frame?: XObjectHandler | undefined
     _on_data?: XObjectHandler | undefined
+    _on_change?: XObjectHandler | undefined
     _on_event?: XObjectHandler | undefined
+    _persist?: XObjectPersistConfig | undefined
 
 
     //real-time controllers
@@ -235,13 +266,300 @@ export class XObject {
     protected _mounted: boolean = false
     protected _xporter: XDataXporter = {
         _ignore_fields: ["_to_xdata_ignore_fields", "_xporter", "_children", "_on", "_once",
-            "_on_create", "_on_mount", "_on_frame", "_on_data", "_process_frame", "_process_data",
-            "_parent", "_event_listeners_ids", "_event_parsed", "_mounted", "_debug"],
+            "_on_create", "_on_mount", "_on_frame", "_on_data", "_on_change", "_process_frame", "_process_data",
+            "_parent", "_event_listeners_ids", "_event_parsed", "_mounted", "_debug",
+            "_requirements_unsubs", "_mount_handler_ran", "_persist_generated"],
         _instance_xporters: {}
     }
 
     private _xd_unsub?: () => void;
     private _xd_bound_key?: string;
+    private _xd_bound_path?: string;
+    private _requirements_unsubs?: Array<() => void>;
+    private _mount_handler_ran?: boolean;
+    private _persist_generated?: {
+        key: string;
+        generated_data_source?: string;
+        on_mount: XObjectHandler;
+        on_data: XObjectHandler;
+        on_change: XObjectHandler;
+    };
+
+    private _normalize_data_source(key: string): string {
+        return key.replaceAll(":.", ".");
+    }
+
+    private _resolve_data_source(sourceKey: string, explicitPath?: string): { key: string; path: string } {
+        const normalizedKey = this._normalize_data_source(sourceKey);
+        const path =
+            typeof explicitPath === "string" && explicitPath.length > 0
+                ? explicitPath
+                : "";
+
+        if (path) {
+            return {
+                key: normalizedKey,
+                path
+            };
+        }
+
+        let candidate = normalizedKey;
+
+        while (candidate.length > 0) {
+            if (_xd.has(candidate)) {
+                const suffix = normalizedKey.slice(candidate.length);
+
+                return {
+                    key: candidate,
+                    path: suffix.startsWith(".")
+                        ? suffix.slice(1)
+                        : ""
+                };
+            }
+
+            const dot = candidate.lastIndexOf(".");
+            if (dot < 0) break;
+            candidate = candidate.slice(0, dot);
+        }
+
+        return {
+            key: normalizedKey,
+            path: ""
+        };
+    }
+
+    private _project_data_source_value(value: any, path?: string): any {
+        return path
+            ? _xu.get_path(value, path)
+            : value;
+    }
+
+    private _get_requirement_value(requirement: string): any {
+        if (_xd.has(requirement)) {
+            return _xd.get(requirement);
+        }
+
+        const parts = requirement.split(".").filter(Boolean);
+
+        for (let i = parts.length - 1; i > 0; i--) {
+            const key = parts.slice(0, i).join(".");
+
+            if (_xd.has(key)) {
+                const root = _xd.get(key);
+                const path = parts.slice(i).join(".");
+
+                return path
+                    ? _xu.get_path(root, path)
+                    : root;
+            }
+        }
+
+        return undefined;
+    }
+
+    private _get_requirement_watch_keys(requirement: string): string[] {
+        const parts = requirement.split(".").filter(Boolean);
+
+        if (parts.length === 0) return [];
+
+        return _xu.unique_strings(
+            parts.map((_, index) =>
+                parts.slice(0, parts.length - index).join(".")
+            )
+        );
+    }
+
+    private _normalize_persist_config(config: XObjectPersistConfig | undefined): XObjectNormalizedPersistConfig | null {
+        if (typeof config === "string") {
+            const key = config.trim();
+
+            if (key.length === 0) return null;
+
+            return {
+                _store: "xdb-client",
+                _key: key
+            };
+        }
+
+        if (!_xu.is_plain_object(config)) return null;
+
+        const store = typeof config._store === "string" && config._store.trim().length > 0
+            ? config._store.trim()
+            : "xdb-client";
+        const key = typeof config._key === "string"
+            ? config._key.trim()
+            : "";
+
+        if (store !== "xdb-client") {
+            _xlog.error(
+                this._type + "->" + this._id + "] _persist supports only _store: xdb-client"
+            );
+            return null;
+        }
+
+        if (key.length === 0) {
+            _xlog.error(
+                this._type + "->" + this._id + "] _persist requires a non-empty _key"
+            );
+            return null;
+        }
+
+        return {
+            _store: "xdb-client",
+            _key: key,
+            _default: typeof config._default === "string"
+                ? config._default
+                : undefined
+        };
+    }
+
+    private _remove_handler(existing: XObjectHandler | undefined, generated: XObjectHandler | undefined): XObjectHandler | undefined {
+        if (!existing || !generated) return existing;
+
+        if (existing === generated) return undefined;
+
+        if (!Array.isArray(existing)) return existing;
+
+        const next = existing
+            .map((item) => this._remove_handler(item, generated))
+            .filter((item) => item !== undefined) as XObjectHandler[];
+
+        if (next.length === 0) return undefined;
+        if (next.length === 1) return next[0];
+
+        return next;
+    }
+
+    private _clear_persist_generated_handlers() {
+        const generated = this._persist_generated;
+
+        if (!generated) return;
+
+        this._on_mount = this._remove_handler(this._on_mount, generated.on_mount);
+        this._on_data = this._remove_handler(this._on_data, generated.on_data);
+        this._on_change = this._remove_handler(this._on_change, generated.on_change);
+
+        if (
+            generated.generated_data_source &&
+            this._data_source === generated.generated_data_source
+        ) {
+            this._data_source = undefined;
+        }
+
+        this._persist_generated = undefined;
+    }
+
+    private _extract_persist_change_value(data: any): string | undefined {
+        if (typeof data === "string") return data;
+
+        if (!data || typeof data !== "object") return undefined;
+
+        const targetValue = _xu.get_path(data, "target.value");
+        if (typeof targetValue === "string") return targetValue;
+
+        const value = (data as any).value;
+        if (typeof value === "string") return value;
+
+        return undefined;
+    }
+
+    private _apply_persist_config() {
+        const persist = this._normalize_persist_config(this._persist);
+
+        if (!persist) {
+            this._clear_persist_generated_handlers();
+            return;
+        }
+
+        this._clear_persist_generated_handlers();
+
+        const key = persist._key;
+        const defaultValue = persist._default;
+        const shouldBindGeneratedDataSource =
+            typeof this._data_source !== "string" ||
+            this._data_source.length === 0;
+        const authoredDataSource = typeof this._data_source === "string"
+            ? this._normalize_data_source(this._data_source)
+            : undefined;
+        const restoreWillNotifyDataSource =
+            shouldBindGeneratedDataSource ||
+            authoredDataSource === key;
+
+        if (
+            typeof defaultValue === "string" &&
+            (this as any)._value === undefined
+        ) {
+            (this as any)._value = defaultValue;
+        }
+
+        if (shouldBindGeneratedDataSource) {
+            this._data_source = key;
+        }
+
+        const on_mount: XObjectHandler = [
+            {
+                _module: "xdb-client",
+                _op: "get-string",
+                _params: {
+                    _key: key
+                },
+                _output: {
+                    _target: "xdata",
+                    _key: key,
+                    _path: "_result.value"
+                }
+            } as any,
+            async () => {
+                const value = _xd.get(key);
+
+                if (
+                    (value === undefined || value === null) &&
+                    typeof defaultValue === "string"
+                ) {
+                    _xd.set(key, defaultValue, {
+                        source: `xobject:${this._id}:persist-default`
+                    });
+                    return;
+                }
+
+                if (!restoreWillNotifyDataSource) {
+                    await this.onData(value);
+                }
+            }
+        ];
+
+        const on_data: XObjectHandler = async (_object: XObject, data: any) => {
+            const value =
+                typeof data === "string"
+                    ? data
+                    : (data === undefined || data === null) && typeof defaultValue === "string"
+                        ? defaultValue
+                        : undefined;
+
+            if (value === undefined) return;
+
+            (this as any)._value = value;
+        };
+
+        const on_change: XObjectHandler = {
+            _module: "xdb-client",
+            _op: "save-string",
+            _params: {
+                _key: key,
+                _value: "$data"
+            }
+        } as any;
+
+        this._persist_generated = {
+            key,
+            generated_data_source: shouldBindGeneratedDataSource
+                ? key
+                : undefined,
+            on_mount,
+            on_data,
+            on_change
+        };
+    }
 
 
     /***
@@ -630,6 +948,8 @@ export class XObject {
                 this[field] = <any>data[field];
             }
         });
+
+        this._apply_persist_config();
     }
 
     /**
@@ -700,159 +1020,119 @@ export class XObject {
     }
 
 
+    normalizeRequires(requires: string | string[] | undefined = this._requires): string[] {
+        return _xu.unique_strings(
+            _xu.ensure_array<string>(requires)
+                .filter((item) => typeof item === "string")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+        );
+    }
+
+    areRequirementsReady(requires: string[] = this.normalizeRequires()): boolean {
+        return requires.every((requirement) =>
+            !!this._get_requirement_value(requirement)
+        );
+    }
+
+    private _clear_requirement_listeners() {
+        this._requirements_unsubs?.forEach((unsub) => {
+            try {
+                unsub();
+            } catch {
+                // Ignore stale XData readiness subscriptions during cleanup.
+            }
+        });
+        this._requirements_unsubs = undefined;
+    }
+
+    private async _run_mount_handler() {
+        if (this._on_mount) {
+            await this.checkAndRunInternalFunction(this._on_mount);
+        } else if (this._on && this._on["mount"]) {
+            await this.checkAndRunInternalFunction(this._on["mount"]);
+        } else if (this._once && this._once["mount"]) {
+            await this.checkAndRunInternalFunction(this._once["mount"]);
+        }
+
+        if (this._persist_generated?.on_mount) {
+            await this.checkAndRunInternalFunction(this._persist_generated.on_mount);
+        }
+    }
+
+    private async _run_mount_handler_once() {
+        if (this._mount_handler_ran) return;
+
+        this._mount_handler_ran = true;
+        await this._run_mount_handler();
+    }
+
+    async waitForRequirementsThenRunMount(requires: string[] = this.normalizeRequires()): Promise<void> {
+        if (requires.length === 0 || this.areRequirementsReady(requires)) {
+            if (requires.length > 0 && this._debug) {
+                _xlog.log("[xobject] requirements ready", {
+                    _id: this._id,
+                    _requires: requires
+                });
+            }
+
+            this._clear_requirement_listeners();
+            await this._run_mount_handler_once();
+            return;
+        }
+
+        if (this._debug) {
+            _xlog.log("[xobject] waiting for requirements", {
+                _id: this._id,
+                _requires: requires
+            });
+        }
+
+        await new Promise<void>((resolve) => {
+            let resolved = false;
+
+            const tryRun = async () => {
+                if (resolved) return;
+                if (!this.areRequirementsReady(requires)) return;
+
+                resolved = true;
+                this._clear_requirement_listeners();
+
+                if (this._debug) {
+                    _xlog.log("[xobject] requirements ready", {
+                        _id: this._id,
+                        _requires: requires
+                    });
+                }
+
+                await this._run_mount_handler_once();
+                resolve();
+            };
+
+            const watchKeys = _xu.unique_strings(
+                requires.flatMap((requirement) =>
+                    this._get_requirement_watch_keys(requirement)
+                )
+            );
+
+            this._clear_requirement_listeners();
+            this._requirements_unsubs = watchKeys.map((key) =>
+                _xd.on(key, () => {
+                    void tryRun();
+                })
+            );
+
+            void tryRun();
+        });
+    }
+
+
     private async runCmd(cmd: XCommand | XCommandData): Promise<void> {
         const xcmd = (cmd instanceof XCommand) ? cmd : new XCommand(cmd);
         await this.execute(xcmd);
     }
 
     protected async checkAndRunInternalFunction(func: any, ...params: any) {
-        const resolvePath = (root: any, pathText: string): any => {
-            const path = pathText.split(".");
-            let cur = root;
-
-            for (const p of path) {
-                if (cur == null) return undefined;
-                cur = cur[p];
-            }
-
-            return cur;
-        };
-
-        const resolveValue = (
-            val: any,
-            previous_result?: any,
-            context?: Record<string, any>
-        ): any => {
-
-            if (typeof val === "string") {
-
-                // Existing built-ins
-
-                if (val === "$prev") return previous_result;
-
-                if (val.startsWith("$prev.")) {
-                    return resolvePath(
-                        previous_result,
-                        val.slice(6)
-                    );
-                }
-
-                if (val === "$event") return params[0];
-
-                if (val.startsWith("$event.")) {
-                    return resolvePath(
-                        params[0],
-                        val.slice(7)
-                    );
-                }
-
-                // $data is mostly events data, but can also be used for other purposes (e.g. $data._app_id)
-                if (val === "$data") return params[0];
-
-                if (val.startsWith("$data.")) {
-                    return resolvePath(
-                        params[0],
-                        val.slice(6)
-                    );
-                }
-
-                // $xdata is the global XData store, accessible from any context
-
-                if (val.startsWith("$xdata:") || val.startsWith("$xdata.")) {
-                    const expr =
-                        val.startsWith("$xdata:")
-                            ? val.slice("$xdata:".length)
-                            : val.slice("$xdata.".length);
-
-                    const parts = expr.split(".");
-
-                    for (let i = parts.length; i > 0; i--) {
-                        const key = parts.slice(0, i).join(".");
-
-                        if (_xd.has(key)) {
-                            const root = _xd.get(key);
-                            const path = parts.slice(i).join(".");
-
-                            return path ? _xu.get_path(root, path) : root;
-                        }
-                    }
-
-                    return undefined;
-                }
-
-                // Generic context resolver
-                // Supports:
-                // $row
-                // $row._app_id
-                // $user.email
-                // $record.name
-                // etc.
-
-                if (
-                    val.startsWith("$") &&
-                    context &&
-                    typeof context === "object"
-                ) {
-                    const expr = val.slice(1);
-
-                    const dot =
-                        expr.indexOf(".");
-
-                    const root =
-                        dot === -1
-                            ? expr
-                            : expr.slice(0, dot);
-
-                    const path =
-                        dot === -1
-                            ? ""
-                            : expr.slice(dot + 1);
-
-                    if (
-                        Object.prototype.hasOwnProperty.call(
-                            context,
-                            root
-                        )
-                    ) {
-                        const ctx =
-                            context[root];
-
-                        return path
-                            ? resolvePath(ctx, path)
-                            : ctx;
-                    }
-                }
-
-                return val;
-            }
-
-            if (Array.isArray(val)) {
-                return val.map(item =>
-                    resolveValue(
-                        item,
-                        previous_result,
-                        context
-                    )
-                );
-            }
-
-            if (val && typeof val === "object") {
-                const out: any = {};
-
-                for (const k of Object.keys(val)) {
-                    out[k] = resolveValue(
-                        val[k],
-                        previous_result,
-                        context
-                    );
-                }
-
-                return out;
-            }
-
-            return val;
-        };
-
         const runOne = async (
             handler: any,
             previous_result?: any
@@ -1008,11 +1288,69 @@ export class XObject {
 
 
 
-                localCmd._params = resolveValue(
+                localCmd._params = XCommandRuntime.resolveParams(
                     localCmd._params,
-                    previous_result,
-                    (this as any)._context
+                    {
+                        _prev: previous_result,
+                        _data: params[0],
+                        _event: params[0],
+                        _context: (this as any)._context
+                    }
                 );
+
+                if (
+                    localCmd._module === "xd" &&
+                    localCmd._op === "set" &&
+                    localCmd._params?.source === "entity-aggregation:on-mount"
+                ) {
+                    const sourceExpression =
+                        typeof fcmd._params?.value === "string"
+                            ? fcmd._params.value
+                            : undefined;
+                    const previousAggregation =
+                        previous_result?._aggregation ??
+                        previous_result?._result?._aggregation;
+                    const aggregateValueCandidates = [
+                        previous_result?._value,
+                        previous_result?._result?._value,
+                        previousAggregation?._value,
+                    ];
+                    const aggregatePrimitive =
+                        aggregateValueCandidates.find((candidate) =>
+                            typeof candidate === "number" ||
+                            typeof candidate === "string" ||
+                            typeof candidate === "boolean"
+                        );
+
+                    if (
+                        aggregatePrimitive !== undefined &&
+                        (
+                            localCmd._params.value === undefined ||
+                            (
+                                localCmd._params.value !== null &&
+                                typeof localCmd._params.value === "object"
+                            )
+                        )
+                    ) {
+                        localCmd._params.value = aggregatePrimitive;
+                    }
+
+                    const resolvedValue =
+                        localCmd._params.value;
+
+                    _xlog.log("[xvibe] aggregate xdata write", {
+                        _field:
+                            previousAggregation?._field,
+                        _source_expression:
+                            sourceExpression,
+                        _resolved_type:
+                            Array.isArray(resolvedValue) ? "array" : typeof resolvedValue,
+                        _resolved_value:
+                            resolvedValue,
+                        _xdata_key:
+                            localCmd._params.key,
+                    });
+                }
 
                 if (this._debug) {
                     _xlog.log(
@@ -1057,16 +1395,15 @@ export class XObject {
         }
 
 
-        // run on mount handlers
-        if (this._on_mount) {
-            await this.checkAndRunInternalFunction(this._on_mount);
-        } else if (this._on && this._on["mount"]) {
-            await this.checkAndRunInternalFunction(this._on["mount"]);
-        } else if (this._once && this._once["mount"]) {
-            await this.checkAndRunInternalFunction(this._once["mount"]);
-        }
+        const requirements = this.normalizeRequires();
 
-        this._mounted = true;
+        if (requirements.length > 0) {
+            this._mounted = true;
+            await this.waitForRequirementsThenRunMount(requirements);
+        } else {
+            await this._run_mount_handler();
+            this._mounted = true;
+        }
 
         for (const child of this._children) {
             if (child.onMount && typeof child.onMount === "function") child.onMount();
@@ -1076,7 +1413,7 @@ export class XObject {
 
 
     emptyDataSource() {
-        const key = this._data_source;
+        const key = this._xd_bound_key ?? this._data_source;
         if (typeof key !== "string" || key.length === 0) return;
 
         const type = (this as any)._type ?? this.constructor.name;
@@ -1093,12 +1430,59 @@ export class XObject {
      */
     async onData(data: any) {
         if (this._process_data) {
+            if (
+                (this as any)._type === "label" &&
+                typeof this._data_source === "string" &&
+                /:sum:[^:]+$/u.test(this._data_source)
+            ) {
+                _xlog.log("[xui] aggregate label binding", {
+                    _object_id:
+                        (this as any)._id,
+                    _data_source:
+                        this._data_source,
+                    _bound_type:
+                        Array.isArray(data) ? "array" : typeof data,
+                    _bound_value:
+                        data,
+                });
+            }
+
+            let authored: any;
+
             if (this._on_data) {
-                this.checkAndRunInternalFunction(this._on_data, data)
+                authored = this.checkAndRunInternalFunction(this._on_data, data)
             } else if (this._on && this._on["data"]) {
-                this.checkAndRunInternalFunction(this._on["data"], data)
+                authored = this.checkAndRunInternalFunction(this._on["data"], data)
             } else if (this._once && this._once["data"]) {
-                this.checkAndRunInternalFunction(this._once["data"], data)
+                authored = this.checkAndRunInternalFunction(this._once["data"], data)
+            }
+
+            if (this._persist_generated?.on_data) {
+                if (authored && typeof authored.then === "function") {
+                    await authored;
+                }
+
+                await this.checkAndRunInternalFunction(this._persist_generated.on_data, data);
+            }
+        }
+    }
+
+    async onChange(data?: any, opts?: { _skip_authored?: boolean }) {
+        if (!opts?._skip_authored) {
+            if (this._on_change) {
+                await this.checkAndRunInternalFunction(this._on_change, data);
+            } else if (this._on && this._on["change"]) {
+                await this.checkAndRunInternalFunction(this._on["change"], data);
+            } else if (this._once && this._once["change"]) {
+                await this.checkAndRunInternalFunction(this._once["change"], data);
+            }
+        }
+
+        if (this._persist_generated?.on_change) {
+            const value = this._extract_persist_change_value(data);
+
+            if (value !== undefined) {
+                await this.checkAndRunInternalFunction(this._persist_generated.on_change, value);
             }
         }
     }
@@ -1217,6 +1601,10 @@ export class XObject {
                     moduleName + "." + op + " " + err
                 );
 
+                if ((xCommand as any)?._fail_on_error === true) {
+                    throw err;
+                }
+
                 return;
             }
         }
@@ -1231,10 +1619,11 @@ export class XObject {
                     ...(xCommand as any),
                     _op: op
                 };
-                return await this._nano_commands[op](
+                const result = await this._nano_commands[op](
                     <XCommand>normalizedCommand,
                     this
                 );
+                return XCommandRuntime.applyOutput(normalizedCommand as any, result);
 
             } catch (err) {
 
@@ -1264,6 +1653,13 @@ export class XObject {
         Object.keys(this).forEach(field => {
             if (!this._xporter._ignore_fields.includes(field) &&
                 this.hasOwnProperty(field) && this[field] !== undefined) {
+                if (
+                    field === "_data_source" &&
+                    this._persist_generated?.generated_data_source === this._data_source
+                ) {
+                    return;
+                }
+
                 const tf = this[field]
                 if (typeof tf === "function") {
                     // Functions are omitted from XData export to avoid serialization of executable code.
@@ -1325,19 +1721,29 @@ export class XObject {
     bindDataSource(key?: string, opts?: { initial?: boolean }) {
         const initial = opts?.initial ?? true;
 
-        const k = (key ?? this._data_source);
-        if (typeof k !== "string" || k.length === 0) return;
+        const rawKey = (key ?? this._data_source);
+        if (typeof rawKey !== "string" || rawKey.length === 0) return;
         if (!this._process_data) return;
 
+        const binding =
+            this._resolve_data_source(
+                rawKey,
+                this._data_path
+            );
+
+        const k = binding.key;
+        const path = binding.path;
+
         // If already bound to same key, do nothing
-        if (this._xd_bound_key === k && this._xd_unsub) return;
+        if (this._xd_bound_key === k && this._xd_bound_path === path && this._xd_unsub) return;
 
         // Unbind previous key
         this.unbindDataSource();
 
-        // Persist the source key
-        this._data_source = k;
+        // Keep authored source stable; resolved key/path are internal binding state.
+        this._data_source = rawKey;
         this._xd_bound_key = k;
+        this._xd_bound_path = path;
 
         const type = (this as any)._type ?? this.constructor.name;
         const id = (this as any)._id ?? "no-id";
@@ -1345,12 +1751,22 @@ export class XObject {
 
         // Subscribe (XData2)
         this._xd_unsub = _xd.on(k, async (ch) => {
-            await this.onData(ch.value);
+            await this.onData(
+                this._project_data_source_value(
+                    ch.value,
+                    path
+                )
+            );
         });
 
         // Optional initial push (mimics old "if already set, deliver once")
         if (initial && _xd.has(k)) {
-            this.onData(_xd.get(k));
+            this.onData(
+                this._project_data_source_value(
+                    _xd.get(k),
+                    path
+                )
+            );
         }
     }
 
@@ -1358,6 +1774,7 @@ export class XObject {
         this._xd_unsub?.();
         this._xd_unsub = undefined;
         this._xd_bound_key = undefined;
+        this._xd_bound_path = undefined;
     }
 
 
@@ -1366,6 +1783,7 @@ export class XObject {
      * Dispose the XObject and all its children
      */
     async dispose() {
+        this._clear_requirement_listeners();
         this.unbindDataSource();
 
         if (this._parent) {

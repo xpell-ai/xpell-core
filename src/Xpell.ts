@@ -46,12 +46,14 @@ import { XModule, XMODULE_SKILL } from "./XModule"
 import { setXRuntime } from "./XRuntime";
 import { XEventManagerModule } from "./XEvenetManagerModule"
 import { XOBJECT_SKILL } from "./XObject"
+import { XCommandRuntime } from "./XCommandRuntime"
 
 
 
 
 export const XD_FRAME_NUMBER = "engine:frame-number";
 export const XD_FPS = "engine:fps";
+const XD_READY_PREFIX = "system.ready.";
 
 
 
@@ -121,6 +123,26 @@ export class XpellEngine {
      */
     async delay(ms: number) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    private readinessKey(name: string): string {
+        const key = String(name ?? "").trim();
+
+        return key.startsWith(XD_READY_PREFIX)
+            ? key
+            : XD_READY_PREFIX + key;
+    }
+
+    ready(name: string, value: boolean = true): void {
+        _xd.set(this.readinessKey(name), value, { source: "xpell:ready" });
+    }
+
+    notReady(name: string): void {
+        _xd.set(this.readinessKey(name), false, { source: "xpell:notReady" });
+    }
+
+    isReady(name: string): boolean {
+        return !!_xd.get(this.readinessKey(name));
     }
 
 
@@ -202,7 +224,15 @@ export class XpellEngine {
      */
     execute(xcmd: XCommand | XCommandData): any {
         if (xcmd && xcmd._module && this._modules[xcmd._module]) {
-            return this._modules[xcmd._module].execute(xcmd)
+            const result = this._modules[xcmd._module].execute(xcmd);
+
+            if (result && typeof result.then === "function") {
+                return result.then((resolved: any) =>
+                    XCommandRuntime.applyOutput(xcmd, resolved)
+                );
+            }
+
+            return XCommandRuntime.applyOutput(xcmd, result);
         } else {
             throw "Xpell module " + xcmd._module + " not loaded"
         }
@@ -317,7 +347,13 @@ export { _XUtils, XUtils, _xu, type XFrameScheduler } from "./XUtils"
 export { XData, _xd, type XDataStore, _XData } from "./XData"
 export { XDataModule } from "./XDataModule"
 export { XParser } from "./XParser"
-export { XCommand, type XCommandData } from "./XCommand"
+export { XCommand, type XCommandData, type XCommandOutputData } from "./XCommand"
+export {
+    XCommandRuntime,
+    type XCommandRuntimeResolveOptions,
+    type XCommandRuntimeOutputOptions,
+    type XCommandOutputTarget
+} from "./XCommandRuntime"
 export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
 export {
     XModule,
@@ -347,6 +383,7 @@ export {
     type XEventListener,
     type XEventListenerOptions,
 } from "./XEventManager.js";
+export { setXRuntime, getXRuntime } from "./XRuntime";
 export { XEventManagerModule } from "./XEvenetManagerModule"
 export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands"
 export { createNanoCommandWithSkill } from "./XNanoCommands"
@@ -357,5 +394,9 @@ export type {
     XpellSkill,
     XpellSkillType,
     XpellSkillCommand,
-    XpellSkillModule
+    XpellSkillModule,
+    XpellRuntimeTestMetadata,
+    XpellRuntimeTestProfileMetadata,
+    XpellRuntimeTestScope,
+    XpellRuntimeTestTarget
 } from "./XSkills";

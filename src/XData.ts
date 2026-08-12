@@ -1,5 +1,6 @@
 
 import _xu from "./XUtils";
+import { _xlog } from "./XLogger";
 
 
 export type XDataStore = Record<string, any>;
@@ -20,6 +21,19 @@ export type XDataChange = {
 };
 
 export type XDataListener = (change: XDataChange) => void;
+
+function isAggregateXDataWrite(key: string, meta?: XDataMeta): boolean {
+    return (
+        meta?.source === "entity-aggregation:on-mount" ||
+        /:sum:[^:]+$/u.test(key)
+    );
+}
+
+function valueKeys(value: any): string[] | undefined {
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? Object.keys(value)
+        : undefined;
+}
 
 // XData2
 export class _XData {
@@ -97,6 +111,26 @@ export class _XData {
     set(key: string, value: any, meta?: XDataMeta) {
         const prev = this._objects[key];
         this._objects[key] = value;
+        if (isAggregateXDataWrite(key, meta)) {
+            _xlog.log("[xdata] aggregate value received", {
+                _key: key,
+                _value_type: Array.isArray(value) ? "array" : typeof value,
+                _value_keys: valueKeys(value),
+                _value: value,
+            });
+        }
+        // _xlog.log("[xdata] set", {
+        //     _path:
+        //         key,
+        //     _type:
+        //         typeof value,
+        //     _count:
+        //         Array.isArray(value)
+        //             ? value.length
+        //             : value && typeof value === "object"
+        //                 ? Object.keys(value).length
+        //                 : undefined
+        // });
         this._emit({ key, value, prev, ts: Date.now(), op: "set", meta });
     }
 
@@ -179,5 +213,3 @@ export class _XData {
 export const XData = new _XData();
 export const _xd = XData;
 export default XData;
-
-
