@@ -1,6 +1,6 @@
 
-import _xu from "./XUtils";
-import { _xlog } from "./XLogger";
+import _xu from "./XUtils.js";
+import { _xlog } from "./XLogger.js";
 
 
 export type XDataStore = Record<string, any>;

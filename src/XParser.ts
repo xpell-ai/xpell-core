@@ -40,8 +40,8 @@
  * @copyright © 2022–present Aime Technologies. All rights reserved.
  */
 
-import XCommand, { XCommandData } from "./XCommand"
-import * as _XC from "./XConst"
+import XCommand, { XCommandData } from "./XCommand.js"
+import * as _XC from "./XConst.js"
 
 
 export class XParser {

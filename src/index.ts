@@ -5,5 +5,5 @@
  *
  * @packageDocumentation
  */
-export * from "./Xpell";
-export { default } from "./Xpell";
+export * from "./Xpell.js";
+export { default } from "./Xpell.js";

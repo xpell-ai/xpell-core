@@ -1,8 +1,8 @@
-import XCommand, { XCommandData } from "./XCommand";
-import { getXEventManager } from "./XEventManager";
-import { XLogger as _xlog } from "./XLogger";
-import XObject from "./XObject";
-import type { XpellSkillCommand } from "./XSkills";
+import XCommand, { XCommandData } from "./XCommand.js";
+import { getXEventManager } from "./XEventManager.js";
+import { XLogger as _xlog } from "./XLogger.js";
+import XObject from "./XObject.js";
+import type { XpellSkillCommand } from "./XSkills.js";
 
 export interface XNanoCommand {
   (

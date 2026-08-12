@@ -5,8 +5,8 @@
  * dispatch responsibilities.
  */
 
-import { _xd as defaultXData } from "./XData";
-import { _xu } from "./XUtils";
+import { _xd as defaultXData } from "./XData.js";
+import { _xu } from "./XUtils.js";
 
 type XDataRuntimeStore = {
     get(key: string): any;

@@ -35,18 +35,18 @@
 
 
 /** interface */
-import XCommand, { XCommandData } from "./XCommand"
-import { _xu ,XFrameScheduler } from "./XUtils"
-import {FPSCalc} from "./FPSCalc"
-import { XLogger as _xlog } from "./XLogger"
-import { _xd } from "./XData"
-import { XDataModule } from "./XDataModule"
-import XParser from "./XParser"
-import { XModule, XMODULE_SKILL } from "./XModule"
-import { setXRuntime } from "./XRuntime";
-import { XEventManagerModule } from "./XEvenetManagerModule"
-import { XOBJECT_SKILL } from "./XObject"
-import { XCommandRuntime } from "./XCommandRuntime"
+import XCommand, { XCommandData } from "./XCommand.js"
+import { _xu ,XFrameScheduler } from "./XUtils.js"
+import {FPSCalc} from "./FPSCalc.js"
+import { XLogger as _xlog } from "./XLogger.js"
+import { _xd } from "./XData.js"
+import { XDataModule } from "./XDataModule.js"
+import XParser from "./XParser.js"
+import { XModule, XMODULE_SKILL } from "./XModule.js"
+import { setXRuntime } from "./XRuntime.js";
+import { XEventManagerModule } from "./XEvenetManagerModule.js"
+import { XOBJECT_SKILL } from "./XObject.js"
+import { XCommandRuntime } from "./XCommandRuntime.js"
 
 
 
@@ -343,23 +343,23 @@ export default Xpell
 
 
 export { Xpell as _x }
-export { _XUtils, XUtils, _xu, type XFrameScheduler } from "./XUtils"
-export { XData, _xd, type XDataStore, _XData } from "./XData"
-export { XDataModule } from "./XDataModule"
-export { XParser } from "./XParser"
-export { XCommand, type XCommandData, type XCommandOutputData } from "./XCommand"
+export { _XUtils, XUtils, _xu, type XFrameScheduler } from "./XUtils.js"
+export { XData, _xd, type XDataStore, _XData } from "./XData.js"
+export { XDataModule } from "./XDataModule.js"
+export { XParser } from "./XParser.js"
+export { XCommand, type XCommandData, type XCommandOutputData } from "./XCommand.js"
 export {
     XCommandRuntime,
     type XCommandRuntimeResolveOptions,
     type XCommandRuntimeOutputOptions,
     type XCommandOutputTarget
-} from "./XCommandRuntime"
-export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger"
+} from "./XCommandRuntime.js"
+export { XLogger, XLogger as _xlog, _XLogger } from "./XLogger.js"
 export {
     XModule,
     type XModuleData,
     // GenericModule
-} from "./XModule"
+} from "./XModule.js"
 export {
     XObject,
     XObjectPack,
@@ -374,8 +374,8 @@ export {
     type XArtifactIntent,
     type XArtifactValidationResult,
     type XArtifactStrategy
-} from "./XObject"
-export { XObjectManager } from "./XObjectManager"
+} from "./XObject.js"
+export { XObjectManager } from "./XObjectManager.js"
 export {
     setXEventManager,
     getXEventManager,
@@ -383,13 +383,13 @@ export {
     type XEventListener,
     type XEventListenerOptions,
 } from "./XEventManager.js";
-export { setXRuntime, getXRuntime } from "./XRuntime";
-export { XEventManagerModule } from "./XEvenetManagerModule"
-export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands"
-export { createNanoCommandWithSkill } from "./XNanoCommands"
-export { XParams } from "./XParams"
-export { XError, type XErrorOptions, type XErrorLevel, type XErrorMeta } from "./XError"
-export { type XResponseData, XResponse, XResponseOK, XResponseError } from "./XProtocol"
+export { setXRuntime, getXRuntime } from "./XRuntime.js";
+export { XEventManagerModule } from "./XEvenetManagerModule.js"
+export { type XNanoCommandPack, type XNanoCommand } from "./XNanoCommands.js"
+export { createNanoCommandWithSkill } from "./XNanoCommands.js"
+export { XParams } from "./XParams.js"
+export { XError, type XErrorOptions, type XErrorLevel, type XErrorMeta } from "./XError.js"
+export { type XResponseData, XResponse, XResponseOK, XResponseError } from "./XProtocol.js"
 export type {
     XpellSkill,
     XpellSkillType,
@@ -399,4 +399,4 @@ export type {
     XpellRuntimeTestProfileMetadata,
     XpellRuntimeTestScope,
     XpellRuntimeTestTarget
-} from "./XSkills";
+} from "./XSkills.js";

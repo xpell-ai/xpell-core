@@ -26,7 +26,7 @@
  */
 
 
-import XError from "./XError";
+import XError from "./XError.js";
 
 
 export type XResponseData = {

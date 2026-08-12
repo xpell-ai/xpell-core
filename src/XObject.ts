@@ -25,16 +25,16 @@
  */
 
 
-import { _xu } from "./XUtils"
-import XCommand, { XCommandData } from "./XCommand";
-import XParser from "./XParser"
-import { XLogger as _xlog } from "./XLogger";
-import { XEventListenerOptions, getXEventManager } from "./XEventManager";
-import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands";
-import _xd, { XDataStore } from "./XData";
-import { getXRuntime } from "./XRuntime";
-import type { XpellSkill, XpellSkillCommand } from "./XSkills";
-import { XCommandRuntime } from "./XCommandRuntime";
+import { _xu } from "./XUtils.js"
+import XCommand, { XCommandData } from "./XCommand.js";
+import XParser from "./XParser.js"
+import { XLogger as _xlog } from "./XLogger.js";
+import { XEventListenerOptions, getXEventManager } from "./XEventManager.js";
+import { _xobject_basic_nano_commands, XNanoCommandPack, XNanoCommand } from "./XNanoCommands.js";
+import _xd, { XDataStore } from "./XData.js";
+import { getXRuntime } from "./XRuntime.js";
+import type { XpellSkill, XpellSkillCommand } from "./XSkills.js";
+import { XCommandRuntime } from "./XCommandRuntime.js";
 
 
 export const XOBJECT_SKILL: XpellSkill = {

@@ -54,18 +54,18 @@
  * © 2022–present Aime Technologies. All rights reserved.
  */
 
-import { _xu } from "./XUtils"
-import XParser from "./XParser"
-import { XLogger as _xl } from "./XLogger";
-import XObjectManager from "./XObjectManager";
-import * as _XC from "./XConst"
-import { XObjectData, XObject, XObjectPack } from "./XObject";
-import XCommand, { XCommandData } from "./XCommand";
-import { _xd } from "./XData";
+import { _xu } from "./XUtils.js"
+import XParser from "./XParser.js"
+import { XLogger as _xl } from "./XLogger.js";
+import XObjectManager from "./XObjectManager.js";
+import * as _XC from "./XConst.js"
+import { XObjectData, XObject, XObjectPack } from "./XObject.js";
+import XCommand, { XCommandData } from "./XCommand.js";
+import { _xd } from "./XData.js";
 import type {
     XpellSkill,
     XpellSkillCommand
-} from "./XSkills";
+} from "./XSkills.js";
 
 
 export type XModuleData = {

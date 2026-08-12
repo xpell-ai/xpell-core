@@ -1,12 +1,12 @@
 import XCommand from "./XCommand.js";
 import { XModule } from "./XModule.js";
 import { _xu } from "./XUtils.js";
-import { getXEventManager } from "./XEventManager";
+import { getXEventManager } from "./XEventManager.js";
 import { _xlog } from "./XLogger.js";
 import type {
   XpellSkill,
   XpellSkillCommand
-} from "./XSkills";
+} from "./XSkills.js";
 
 const XEM_SKILL: XpellSkill = {
   _id: "xem",

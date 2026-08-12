@@ -8,7 +8,7 @@ export default defineConfig({
       name: "XpellCore",
       formats: ["es", "cjs"],
       fileName: (format) =>
-        format === "es" ? "xpell-core.es.js" : "xpell-core.cjs.js",
+        format === "es" ? "xpell-core.es.js" : "xpell-core.cjs",
     },
     rollupOptions: {
       external: [],

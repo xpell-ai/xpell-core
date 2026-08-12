@@ -1,9 +1,9 @@
-import { _xd } from "./XData";
-import { XModule } from "./XModule";
-import { _xu } from "./XUtils";
-import { XCommand } from "./XCommand";
-import { _xlog } from "./XLogger";
-import type { XpellSkill, XpellSkillCommand } from "./XSkills";
+import { _xd } from "./XData.js";
+import { XModule } from "./XModule.js";
+import { _xu } from "./XUtils.js";
+import { XCommand } from "./XCommand.js";
+import { _xlog } from "./XLogger.js";
+import type { XpellSkill, XpellSkillCommand } from "./XSkills.js";
 
 const XDATA_SKILL: XpellSkill = {
   _id: "xdata",

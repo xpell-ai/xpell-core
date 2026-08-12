@@ -23,8 +23,8 @@
  */
 
 
-import XLogger from "./XLogger";
-import XObject, { XObjectPack } from "./XObject";
+import XLogger from "./XLogger.js";
+import XObject, { XObjectPack } from "./XObject.js";
 
 
 export type XObjectManagerIndex = {

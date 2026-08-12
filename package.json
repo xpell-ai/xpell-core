@@ -1,6 +1,6 @@
 {
   "name": "@xpell/core",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "publishConfig": {
     "access": "public"
   },
@@ -13,14 +13,14 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "main": "./dist/xpell-core.cjs.js",
+  "main": "./dist/xpell-core.cjs",
   "module": "./dist/xpell-core.es.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/xpell-core.es.js",
-      "require": "./dist/xpell-core.cjs.js"
+      "require": "./dist/xpell-core.cjs"
     },
     "./package.json": "./package.json"
   },
