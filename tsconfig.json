@@ -14,12 +14,12 @@
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
         "noEmit": true,
-        "baseUrl": "./",
         "paths": {
             "xpell-core": [
                 "./src"
             ]
-        }
+        },
+        "types": ["node"] 
     },
     "include": [
         "src",

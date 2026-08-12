@@ -1,6 +1,6 @@
 {
   "name": "@xpell/core",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "publishConfig": {
     "access": "public"
   },
@@ -43,8 +43,13 @@
         "_scope": "package",
         "_runtime": "node",
         "_description": "Runs the existing @xpell/core package test script.",
-        "_profiles": ["xpell-core.package"],
-        "_tags": ["package", "script"],
+        "_profiles": [
+          "xpell-core.package"
+        ],
+        "_tags": [
+          "package",
+          "script"
+        ],
         "_entry": {
           "_type": "script",
           "_script": "test"
@@ -58,8 +63,14 @@
         "_scope": "runtime",
         "_runtime": "node",
         "_description": "Existing runtime regression coverage in tests/xcommand-runtime.test.mjs.",
-        "_profiles": ["xpell-core.package", "xpell-core.runtime"],
-        "_tags": ["runtime", "regression"],
+        "_profiles": [
+          "xpell-core.package",
+          "xpell-core.runtime"
+        ],
+        "_tags": [
+          "runtime",
+          "regression"
+        ],
         "_entry": {
           "_type": "file",
           "_file": "tests/xcommand-runtime.test.mjs"
@@ -73,8 +84,12 @@
         "_scope": "package",
         "_runtime": "node",
         "_description": "Verifies package metadata and declared local entries without publishing or network checks.",
-        "_profiles": ["xpell-core.package"],
-        "_tags": ["package-check"],
+        "_profiles": [
+          "xpell-core.package"
+        ],
+        "_tags": [
+          "package-check"
+        ],
         "_entry": {
           "_type": "package-check",
           "_check": "package"
@@ -85,14 +100,23 @@
       {
         "_id": "xpell-core.package",
         "_title": "@xpell/core package verification",
-        "_includes": ["xpell-core.*"],
-        "_tags": ["package"]
+        "_includes": [
+          "xpell-core.*"
+        ],
+        "_tags": [
+          "package"
+        ]
       },
       {
         "_id": "xpell-core.runtime",
         "_title": "@xpell/core runtime regression",
-        "_includes": ["xpell-core.regression.*"],
-        "_tags": ["runtime", "regression"]
+        "_includes": [
+          "xpell-core.regression.*"
+        ],
+        "_tags": [
+          "runtime",
+          "regression"
+        ]
       }
     ]
   },
@@ -122,8 +146,9 @@
     "url": "https://github.com/xpell-ai/xpell-core.git"
   },
   "devDependencies": {
-    "typedoc": "^0.27.9",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.3"
+    "@types/node": "^24.13.3",
+    "typedoc": "^0.28.20",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
   }
 }
