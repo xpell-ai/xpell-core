@@ -47,6 +47,7 @@ import { setXRuntime } from "./XRuntime.js";
 import { XEventManagerModule } from "./XEvenetManagerModule.js"
 import { XOBJECT_SKILL } from "./XObject.js"
 import { XCommandRuntime } from "./XCommandRuntime.js"
+import { XError } from "./XError.js"
 
 
 
@@ -72,6 +73,11 @@ export class XpellEngine {
 
     private _modules: { [name: string]: any } = {}
     private _schedule_frame: XFrameScheduler;
+    private _running = false;
+    private _stopped = false;
+    private _run_owner?: object;
+    private _run_generation = 0;
+    private _frame_pending = false;
     parser: typeof XParser
 
     constructor(opts?: { _target_fps?: number; _schedule_frame?: XFrameScheduler }) {
@@ -223,6 +229,7 @@ export class XpellEngine {
      * @param {XCommand} 
      */
     execute(xcmd: XCommand | XCommandData): any {
+        if (this._stopped) throw new XError("E_X_RUNTIME_STOPPED", "The runtime has stopped.");
         if (xcmd && xcmd._module && this._modules[xcmd._module]) {
             const result = this._modules[xcmd._module].execute(xcmd);
 
@@ -245,15 +252,19 @@ export class XpellEngine {
      * calls all the sub-modules onFrame methods (if implemented)
      */
     onFrame(): void {
+        if (!this._running || this._frame_pending) return;
+        const generation = this._run_generation;
         this._frame_number++;
 
         for (const mod of Object.keys(this._modules)) {
+            if (!this._running || generation !== this._run_generation) return;
             const m = this._modules[mod];
             if (m?.onFrame && typeof m.onFrame === "function") {
                 m.onFrame(this._frame_number);
             }
         }
 
+        if (!this._running || generation !== this._run_generation) return;
         const fps = this._fps_calc.calc();
 
         // canonical keys (preferred)
@@ -266,7 +277,13 @@ export class XpellEngine {
             _xd.set("fps", fps, { source: "engine:legacy" });
         }
 
-        this._schedule_frame(() => this.onFrame());
+        if (!this._running || generation !== this._run_generation) return;
+        this._frame_pending = true;
+        this._schedule_frame(() => {
+            if (!this._running || generation !== this._run_generation) return;
+            this._frame_pending = false;
+            this.onFrame();
+        });
 
     }
 
@@ -281,15 +298,36 @@ export class XpellEngine {
         return this._modules[moduleName]
     }
 
-    /**
-     * Start Xpell engine for web browsers using requestAnimationFrame
-     */
-    start() {
-        _xlog.log("Loading Xpell core modules...[xd, xem]")
-        this.loadModule(new XDataModule() as any)
-        this.loadModule(new XEventManagerModule())
-        _xlog.log("Starting Xpell")
-        this.onFrame()
+    /** Whether this engine currently owns an active frame run. */
+    isRunning(): boolean { return this._running; }
+
+    /** Acquire one frame run. Repeated starts never create a second loop. */
+    start(owner?: object): boolean {
+        if (this._running) return false;
+        this._running = true;
+        this._stopped = false;
+        this._run_owner = owner;
+        this._run_generation++;
+        try {
+            _xlog.log("Loading Xpell core modules...[xd, xem]")
+            this.loadModule(new XDataModule() as any)
+            this.loadModule(new XEventManagerModule())
+            _xlog.log("Starting Xpell")
+            this.onFrame()
+            return true;
+        } catch (error) { this.stop(owner); throw error; }
+    }
+
+    /** Stop only the matching run owner; already-started application work is not cancelled. */
+    stop(owner?: object): boolean {
+        if (!this._running || this._run_owner !== owner) return false;
+        this._running = false;
+        this._stopped = true;
+        this._run_owner = undefined;
+        this._run_generation++;
+        this._frame_pending = false;
+        this._schedule_frame._cancel?.();
+        return true;
     }
 
     getCoreSkills() {

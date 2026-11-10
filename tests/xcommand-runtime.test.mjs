@@ -180,6 +180,37 @@ test("XCommandRuntime resolves legacy command parameters", () => {
   assert.deepEqual(resolved.nested.list, ["Tamir", "row-value"]);
 });
 
+test("XCommandRuntime preserves native event objects while resolving plain params", () => {
+  const file = { name: "case.csv" };
+  const files = { 0: file, length: 1 };
+  class NativeEventLike {}
+  const event = new NativeEventLike();
+  Object.defineProperty(event, "type", { value: "change" });
+  Object.defineProperty(event, "target", {
+    value: { id: "file-input", type: "file", files }
+  });
+
+  const resolved = XCommandRuntime.resolveParams(
+    {
+      _event: event,
+      selected_file: "$event.target.files.0",
+      nested: {
+        event_type: "$event.type"
+      },
+      array: [event, "$event.target.files.length"]
+    },
+    {
+      _event: event
+    }
+  );
+
+  assert.equal(resolved._event, event);
+  assert.equal(resolved.selected_file, file);
+  assert.equal(resolved.nested.event_type, "change");
+  assert.equal(resolved.array[0], event);
+  assert.equal(resolved.array[1], 1);
+});
+
 test("XCommandRuntime resolves flat dotted XData keys", () => {
   _xd.clean();
   _xd.set("settings.theme", "dark", { source: "test" });

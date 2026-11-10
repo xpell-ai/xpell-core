@@ -38,6 +38,34 @@ export type XpellSkillDesignAction = {
   _params?: Record<string, any>;
 };
 
+export type XpellSkillDesignSemanticChildKind =
+  | "group"
+  | "property"
+  | "object"
+  | "object-array"
+  | "children";
+
+export type XpellSkillDesignSemanticChildAction =
+  | "editable"
+  | "deletable"
+  | "duplicable"
+  | "movable"
+  | "add-child";
+
+export type XpellSkillDesignSemanticChild = {
+  _id: string;
+  _label?: string;
+  _role?: string;
+  _kind?: XpellSkillDesignSemanticChildKind;
+  _path?: string;
+  _style_path?: string;
+  _type?: string;
+  _capabilities?: string[];
+  _accepted_types?: string[];
+  _actions?: XpellSkillDesignSemanticChildAction[];
+  _children?: XpellSkillDesignSemanticChild[];
+};
+
 export type XpellSkillDesign = {
   _inspector?: {
     _fields?: XpellSkillInspectorField[];
@@ -52,6 +80,8 @@ export type XpellSkillDesign = {
     _accepted_types?: string[];
     _insert_modes?: Array<"inside" | "before" | "after">;
   };
+  _semantic_children?: XpellSkillDesignSemanticChild[];
+  _slots?: XpellSkillDesignSemanticChild[];
   _palette?: {
     _title?: string;
     _category?: string;

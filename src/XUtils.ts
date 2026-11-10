@@ -33,7 +33,10 @@
 // Core utility helpers (platform-agnostic)
 // ============================================================================
 
-export type XFrameScheduler = (cb: () => void) => void;
+export type XFrameScheduler = ((cb: () => void) => void) & {
+  /** Optional cancellation of the pending frame; legacy schedulers remain valid. */
+  _cancel?: () => void;
+};
 
 export const TWO_PI = 2 * Math.PI;
 
@@ -232,24 +235,30 @@ export class _XUtils {
    */
   createDefaultScheduler(_target_fps?: number): XFrameScheduler {
     const g: any = globalThis as any;
-
-    // Browser / DOM-like env
-    if (typeof g.requestAnimationFrame === "function") {
-      return (cb) => g.requestAnimationFrame(cb);
-    }
-
     const fps =
       typeof _target_fps === "number" && isFinite(_target_fps) && _target_fps > 0
         ? _target_fps
         : 60;
-
-    // If caller didn't request low FPS, run ASAP (good for headless tools)
-    if (typeof g.setImmediate === "function" && (!_target_fps || _target_fps >= 60)) {
-      return (cb) => g.setImmediate(cb);
-    }
-
     const ms = Math.max(1, Math.round(1000 / fps));
-    return (cb) => g.setTimeout(cb, ms);
+    const request = typeof g.requestAnimationFrame === "function"
+      ? (cb: () => void) => g.requestAnimationFrame(cb)
+      : typeof g.setImmediate === "function" && (!_target_fps || _target_fps >= 60)
+        ? (cb: () => void) => g.setImmediate(cb)
+        : (cb: () => void) => g.setTimeout(cb, ms);
+    const cancel = typeof g.requestAnimationFrame === "function"
+      ? (handle: any) => g.cancelAnimationFrame?.(handle)
+      : typeof g.setImmediate === "function" && (!_target_fps || _target_fps >= 60)
+        ? (handle: any) => g.clearImmediate(handle)
+        : (handle: any) => g.clearTimeout(handle);
+    let pending: any;
+    const schedule: XFrameScheduler = cb => {
+      pending = request(() => { pending = undefined; cb(); });
+    };
+    schedule._cancel = () => {
+      if (pending !== undefined) cancel(pending);
+      pending = undefined;
+    };
+    return schedule;
   }
 
 

@@ -285,6 +285,21 @@ export class XObject {
         on_change: XObjectHandler;
     };
 
+    private normalizeEventMap(field: "_on" | "_once"): XObjectOnEventIndex {
+        const value = this[field];
+
+        if (value == null) {
+            this[field] = {};
+            return this[field] as XObjectOnEventIndex;
+        }
+
+        if (typeof value !== "object" || Array.isArray(value)) {
+            throw new TypeError(`${field} event map must be an object when defined`);
+        }
+
+        return value as XObjectOnEventIndex;
+    }
+
     private _normalize_data_source(key: string): string {
         return key.replaceAll(":.", ".");
     }
@@ -791,8 +806,11 @@ export class XObject {
     parseEvents(options?: XEventListenerOptions) {
         if (!this._event_parsed) {
             if (!options) options = this._xem_options
-            Object.keys(this._on).forEach(eventName => {
-                this.addEventListener(eventName, this._on[eventName], options)
+            const onMap = this.normalizeEventMap("_on");
+            const onceMap = this.normalizeEventMap("_once");
+
+            Object.keys(onMap).forEach(eventName => {
+                this.addEventListener(eventName, onMap[eventName], options)
                 // if (typeof this._on[eventName] === "function") {
                 // }
                 // else if(typeof this._on[eventName] === "string") {
@@ -808,8 +826,8 @@ export class XObject {
             Object.assign(onceOptions, options)
             onceOptions._once = true
 
-            Object.keys(this._once).forEach(eventName => {
-                this.addEventListener(eventName, this._once[eventName], onceOptions)
+            Object.keys(onceMap).forEach(eventName => {
+                this.addEventListener(eventName, onceMap[eventName], onceOptions)
 
             })
             this._event_parsed = true
@@ -945,6 +963,7 @@ export class XObject {
         let cdata = Object.keys(data);
         cdata.forEach(field => {
             if (!ignore.hasOwnProperty(field) && data.hasOwnProperty(field)) {
+                if ((field === "_on" || field === "_once") && data[field] == null) return;
                 this[field] = <any>data[field];
             }
         });

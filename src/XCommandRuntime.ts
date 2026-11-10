@@ -33,6 +33,12 @@ export type XCommandRuntimeOutputOptions = {
 };
 
 export class XCommandRuntime {
+    private static isPlainObject(val: any): boolean {
+        if (!val || typeof val !== "object") return false;
+        const proto = Object.getPrototypeOf(val);
+        return proto === Object.prototype || proto === null;
+    }
+
     private static resolvePath(root: any, pathText: string): any {
         const path = pathText.split(".");
         let cur = root;
@@ -168,6 +174,8 @@ export class XCommandRuntime {
         }
 
         if (val && typeof val === "object") {
+            if (!this.isPlainObject(val)) return val;
+
             const out: any = {};
 
             for (const k of Object.keys(val)) {

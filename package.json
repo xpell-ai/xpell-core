@@ -30,7 +30,7 @@
     "build:types": "tsc --project tsconfig.types.json",
     "docs:api": "typedoc",
     "docs": "pnpm run docs:api",
-    "test": "pnpm run build && node --test tests/xcommand-runtime.test.mjs",
+    "test": "pnpm run build && node --test tests/xcommand-runtime.test.mjs tests/xobject-events.test.mjs",
     "publish-alpha-next": "pnpm version prerelease --preid=alpha && pnpm publish --tag alpha"
   },
   "xpell": {
