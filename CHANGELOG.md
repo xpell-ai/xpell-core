@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.8] — 2026-11-13 (unreleased candidate)
+
+- Compared with public 2.0.7 declarations: add semantic-child/slot design metadata and optional scheduler cancellation.
+- Compared with public 2.0.7 declarations: XpellEngine.start(owner?) now returns boolean; isRunning() and stop(owner?) are available. Existing callers can ignore the return, but subclasses overriding start(): void require review.
+- Coordinate the current XCommand, XObject, event and XData runtime with the 2.0.8 package set.
+- Retain existing public exports and platform-neutral runtime behavior.
+
+Compatibility: internal workspace specifications are retained. No public API redesign, PostgreSQL backend, persistence migration or automatic SQLite activation is introduced by this preparation.
+
+Validation: package builds and available tests are recorded in the coordinated Gate 2 report. Gate 3 must verify the exact packed artifacts and clean-consumer compatibility before publication. These entries describe verified checked-out capabilities and release-preparation deltas; they do not claim that every capability is new relative to the last npm artifact.
+
 All notable changes to **xpell-core** are documented in this file.
 
 This project follows **Semantic Versioning** with pre-release tags (`alpha`, `beta`).
